@@ -1,0 +1,35 @@
+{
+  "sessionId": "ts_01JEXAMPLE000000000000000",
+  "traceId": "tr_01JEXAMPLE000000000000000",
+  "expiresAt": "2026-07-14T10:05:00Z",
+  "maxDurationSeconds": 1800,
+  "legs": [
+    {
+      "legId": "leg_01JEXAMPLEA0000000000000",
+      "clientLegId": "ru-to-en",
+      "targetLanguage": "en",
+      "provider": "openai",
+      "model": "gpt-realtime-translate",
+      "clientSecret": "ek_example_redacted",
+      "expiresAt": "2026-07-14T09:36:00Z",
+      "callsUrl": "https://api.openai.com/v1/realtime/translations/calls"
+    },
+    {
+      "legId": "leg_01JEXAMPLEB0000000000000",
+      "clientLegId": "en-to-ru",
+      "targetLanguage": "ru",
+      "provider": "openai",
+      "model": "gpt-realtime-translate",
+      "clientSecret": "ek_example_redacted",
+      "expiresAt": "2026-07-14T09:36:00Z",
+      "callsUrl": "https://api.openai.com/v1/realtime/translations/calls"
+    }
+  ],
+  "policy": {
+    "maxReconnectAttempts": 3,
+    "reconnectBackoffMs": [500, 1500, 3000],
+    "outputInterruption": "duck_and_switch",
+    "outputInterruptionDelayMs": 300,
+    "telemetrySampleRate": 1.0
+  }
+}
