@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.yergakon
 packages:
   WebRTC:
-    url: https://github.com/webrtc-sdk/WebRTC.git
+    url: https://github.com/stasel/WebRTC.git
     from: 125.0.0
 targets:
   RealtimeTranslator:
