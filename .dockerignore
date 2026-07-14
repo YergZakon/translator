@@ -1,0 +1,16 @@
+.git
+.github
+.tools
+.idea
+.vscode
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+apps/ios
+contracts
+docs
+*.docx

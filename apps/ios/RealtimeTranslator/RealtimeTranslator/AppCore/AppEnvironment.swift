@@ -17,4 +17,8 @@ enum AppEnvironment: String, Codable, CaseIterable {
             return URL(string: "https://api.translator.internal")!
         }
     }
+
+    var prototypeAppToken: String {
+        ProcessInfo.processInfo.environment["APP_TOKEN"] ?? ""
+    }
 }

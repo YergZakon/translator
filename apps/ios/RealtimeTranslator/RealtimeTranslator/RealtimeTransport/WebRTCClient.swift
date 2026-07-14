@@ -226,7 +226,7 @@ extension OpenAITranslationLeg: RTCDataChannelDelegate {
 
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         if let event = eventDecoder.decodeEvent(from: buffer.data, side: self.side) {
-            if case .connectionStateChanged(let state) = event, state == .disconnected {
+            if case .sessionClosed = event {
                 self.isClosedByServer = true
             }
             continuation?.yield(event)

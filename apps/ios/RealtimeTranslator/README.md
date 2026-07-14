@@ -1,5 +1,12 @@
 # Realtime Translator iOS
 
+## Prototype backend token
+
+Until the installation-token flow is implemented, set `APP_TOKEN` in the active
+Xcode scheme environment to the same prototype token configured in the backend
+`APP_TOKENS` variable. The token is injected into `LiveBackendClient`; it is not
+stored in the repository or printed to logs.
+
 ## Environment Setup
 This project uses [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the `.xcodeproj` file. Do not commit the `.xcodeproj` file to source control.
 

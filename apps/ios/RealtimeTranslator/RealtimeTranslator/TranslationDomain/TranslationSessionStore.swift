@@ -19,103 +19,132 @@ enum SessionState: Equatable {
         case .connecting: return "Подключаемся..."
         case .active: return "Можно говорить"
         case .reconnecting(let attempt): return "Восстанавливаем соединение (\(attempt)/3)"
-        case .failed(_, let msg): return "Ошибка: \(msg)"
+        case .failed(_, let message): return "Ошибка: \(message)"
         case .completed: return "Сессия завершена"
         }
     }
 }
 
+typealias TranslationLegFactory = (
+    _ configuration: LegConfiguration,
+    _ side: Side,
+    _ diagnostics: DiagnosticsStore
+) -> TranslationLeg
+
 @MainActor
-class TranslationSessionStore: ObservableObject {
+final class TranslationSessionStore: ObservableObject {
     @Published private(set) var state: SessionState = .idle
     @Published private(set) var activeSide: Side = .russianSpeaker
     @Published private(set) var segments: [TranscriptSegment] = []
-    @Published private(set) var isMuted: Bool = false
+    @Published private(set) var isMuted = false
 
     private var currentLeg: TranslationLeg?
     private var eventTask: Task<Void, Never>?
-    private var cancellables = Set<AnyCancellable>()
     private let dependencies: DependencyContainer
+    private let makeLeg: TranslationLegFactory
 
-    init(dependencies: DependencyContainer = .shared) {
+    init(
+        dependencies: DependencyContainer = .shared,
+        makeLeg: @escaping TranslationLegFactory = { configuration, side, diagnostics in
+            OpenAITranslationLeg(configuration: configuration, side: side, diagnostics: diagnostics)
+        }
+    ) {
         self.dependencies = dependencies
+        self.makeLeg = makeLeg
     }
 
     func startSession(mode: TranslationMode) async {
+        guard currentLeg == nil else {
+            state = .failed(code: "SESSION_ALREADY_ACTIVE", message: "A translation session is already active")
+            return
+        }
+        guard mode == .oneWayRuToEn else {
+            state = .failed(code: "UNSUPPORTED_MODE", message: "Dialogue mode is not available yet")
+            return
+        }
+
         state = .loadingConfig
-        
+
         do {
-            let configAPI = dependencies.configAPI
-            let sessionAPI = dependencies.sessionAPI
-            let diagnostics = dependencies.diagnosticsStore
-            
-            // 1. Get Config
-            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-            _ = try await configAPI.getConfig(appVersion: appVersion, appBuild: 1, etag: nil)
-            
-            // 2. Create Session
+            let appInfo = currentAppInfo()
+            let configResponse = try await dependencies.configAPI.getConfig(
+                appVersion: appInfo.version,
+                appBuild: appInfo.build,
+                etag: nil
+            )
+            guard let config = configResponse.config else {
+                state = .failed(code: "CONFIG_UNAVAILABLE", message: "No application configuration is available")
+                return
+            }
+            guard !config.killSwitch else {
+                state = .failed(
+                    code: AppErrorCode.KILL_SWITCH_ACTIVE.rawValue,
+                    message: config.killSwitchMessage ?? "Translation is temporarily unavailable"
+                )
+                return
+            }
+            guard config.allowedModes.contains(mode), config.allowedTargetLanguages.contains(.en) else {
+                state = .failed(
+                    code: AppErrorCode.UNSUPPORTED_CONFIGURATION.rawValue,
+                    message: "This translation mode is disabled by configuration"
+                )
+                return
+            }
+
             state = .creatingSession
             let request = CreateTranslationSessionRequest(
                 mode: mode,
                 sourceLocaleHint: "ru-RU",
-                legs: [TranslationLegRequest(clientLegId: "leg-ru-en", targetLanguage: .en)],
-                app: AppInfo(version: appVersion, build: 1),
-                device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
+                legs: [TranslationLegRequest(clientLegId: "ru-to-en", targetLanguage: .en)],
+                app: appInfo,
+                device: DeviceInfo(
+                    osVersion: String(ProcessInfo.processInfo.operatingSystemVersionString.prefix(32)),
+                    modelClass: "phone"
+                )
             )
-            
-            let idempotencyKey = UUID().uuidString
-            let response = try await sessionAPI.createSession(request: request, idempotencyKey: idempotencyKey)
+
+            let response = try await dependencies.sessionAPI.createSession(
+                request: request,
+                idempotencyKey: UUID().uuidString
+            )
             guard let credentials = response.legs.first else {
                 state = .failed(code: "NO_LEGS", message: "Backend returned zero legs")
                 return
             }
-            
-            // 3. Connect WebRTC
+
             state = .connecting
-            let legConfig = LegConfiguration(
-                callsUrl: credentials.callsUrl,
-                clientSecret: credentials.clientSecret
+            let leg = makeLeg(
+                LegConfiguration(
+                    clientLegId: credentials.clientLegId,
+                    targetLanguage: credentials.targetLanguage.rawValue,
+                    clientSecret: credentials.clientSecret,
+                    callsUrl: credentials.callsUrl
+                ),
+                .russianSpeaker,
+                dependencies.diagnosticsStore
             )
-            
-            let leg = OpenAITranslationLeg(configuration: legConfig, side: .russianSpeaker, diagnostics: diagnostics)
-            self.currentLeg = leg
-            try await leg.connect()
-            
-            // 4. Consume Events
-            self.eventTask = Task { [weak self] in
-                for await event in leg.events {
-                    await self?.handleEvent(event)
-                }
+            currentLeg = leg
+            consumeEvents(from: leg)
+
+            do {
+                try await leg.connect()
+            } catch {
+                eventTask?.cancel()
+                eventTask = nil
+                currentLeg = nil
+                throw error
             }
         } catch let error as BackendError {
-            if case .serverError(let appError) = error {
+            switch error {
+            case .serverError(let appError):
                 state = .failed(code: appError.code.rawValue, message: appError.message)
-            } else {
+            case .simulatedNetworkError:
                 state = .failed(code: "NETWORK", message: "Network error")
             }
+        } catch let error as TranslationError {
+            state = .failed(code: error.code, message: error.message)
         } catch {
             state = .failed(code: "UNKNOWN", message: error.localizedDescription)
-        }
-    }
-    
-    private func handleEvent(_ event: TranslationEvent) {
-        switch event {
-        case .connectionStateChanged(let connectionState):
-            switch connectionState {
-            case .connecting:
-                state = .connecting
-            case .connected:
-                state = .active
-            case .disconnected, .failed:
-                state = .failed(code: "WEBRTC_FAILED", message: "WebRTC connection lost")
-            }
-        case .transcriptDelta(let segment):
-            appendTranscriptDelta(id: segment.id, text: segment.delta, side: segment.side, isFinal: segment.isFinal)
-        case .sessionClosed:
-            state = .completed
-            self.currentLeg = nil
-        default:
-            break
         }
     }
 
@@ -131,36 +160,91 @@ class TranslationSessionStore: ObservableObject {
         }
     }
 
-    private func appendTranscriptDelta(id: String, text: String, side: Side, isFinal: Bool) {
-        if let idx = segments.firstIndex(where: { $0.id == id }) {
-            segments[idx].text += text
-            segments[idx].isFinal = isFinal
-        } else {
-            let newSegment = TranscriptSegment(id: id, text: text, timestamp: Date(), side: side, isFinal: isFinal)
-            segments.append(newSegment)
-            if segments.count > 20 {
-                segments.removeFirst()
-            }
-        }
-    }
-
     func completeSegment(id: String) {
-        if let idx = segments.firstIndex(where: { $0.id == id }) {
-            segments[idx].isFinal = true
+        if let index = segments.firstIndex(where: { $0.id == id }) {
+            segments[index].isFinal = true
         }
     }
 
     func stopSession() {
+        let leg = currentLeg
+        currentLeg = nil
+        eventTask?.cancel()
+        eventTask = nil
+        state = .completed
+        segments.removeAll()
+
         Task {
-            await currentLeg?.close(reason: .userInitiated)
-            self.eventTask?.cancel()
-            self.currentLeg = nil
-            self.state = .completed
-            self.segments.removeAll()
+            await leg?.close(reason: .userStopped)
         }
     }
 
     func reportError(code: String, message: String) {
         state = .failed(code: code, message: message)
+    }
+
+    private func currentAppInfo() -> AppInfo {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let buildString = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return AppInfo(version: version, build: Int(buildString) ?? 1)
+    }
+
+    private func consumeEvents(from leg: TranslationLeg) {
+        eventTask?.cancel()
+        eventTask = Task { [weak self] in
+            for await event in leg.events {
+                guard !Task.isCancelled else { return }
+                await self?.handleEvent(event)
+            }
+        }
+    }
+
+    private func handleEvent(_ event: TranslationEvent) async {
+        switch event {
+        case .connectionStateChanged(let connectionState):
+            switch connectionState {
+            case .connecting:
+                state = .connecting
+            case .connected:
+                await currentLeg?.setMicrophoneEnabled(!isMuted)
+                await currentLeg?.setOutputEnabled(true)
+                state = .active
+            case .disconnected, .failed:
+                state = .failed(code: "WEBRTC_FAILED", message: "WebRTC connection lost")
+            }
+        case .transcriptDelta(let segment):
+            appendTranscriptDelta(
+                id: segment.id,
+                text: segment.text,
+                side: segment.side,
+                isFinal: segment.isFinal
+            )
+        case .sessionClosed:
+            state = .completed
+            currentLeg = nil
+            eventTask = nil
+        case .error(let error):
+            state = .failed(code: error.code, message: error.message)
+        case .audioReceived:
+            break
+        }
+    }
+
+    private func appendTranscriptDelta(id: String, text: String, side: Side, isFinal: Bool) {
+        if let index = segments.firstIndex(where: { $0.id == id }) {
+            segments[index].text += text
+            segments[index].isFinal = isFinal
+        } else {
+            segments.append(TranscriptSegment(
+                id: id,
+                text: text,
+                timestamp: Date(),
+                side: side,
+                isFinal: isFinal
+            ))
+            if segments.count > 20 {
+                segments.removeFirst()
+            }
+        }
     }
 }

@@ -2,81 +2,178 @@ import XCTest
 import Combine
 @testable import RealtimeTranslator
 
-final class MockMockSessionAPI: SessionAPI, ConfigAPI {
+final class MockSessionAPI: SessionAPI, ConfigAPI {
     var configResult: Result<ConfigResponse, Error>?
     var sessionResult: Result<CreateSessionResponse, Error>?
-    var lastIdempotencyKey: String?
-    
+    private(set) var lastIdempotencyKey: String?
+    private(set) var lastRequest: CreateTranslationSessionRequest?
+
     func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse {
-        if let result = configResult {
-            return try result.get()
-        }
-        throw URLError(.badServerResponse)
+        guard let configResult else { throw URLError(.badServerResponse) }
+        return try configResult.get()
     }
-    
-    func createSession(request: CreateTranslationSessionRequest, idempotencyKey: String) async throws -> CreateSessionResponse {
+
+    func createSession(
+        request: CreateTranslationSessionRequest,
+        idempotencyKey: String
+    ) async throws -> CreateSessionResponse {
+        lastRequest = request
         lastIdempotencyKey = idempotencyKey
-        if let result = sessionResult {
-            return try result.get()
-        }
-        throw URLError(.badServerResponse)
+        guard let sessionResult else { throw URLError(.badServerResponse) }
+        return try sessionResult.get()
+    }
+}
+
+final class MockTranslationLeg: TranslationLeg {
+    let events: AsyncStream<TranslationEvent>
+    private let continuation: AsyncStream<TranslationEvent>.Continuation
+    private(set) var didConnect = false
+    private(set) var microphoneEnabled: Bool?
+    private(set) var outputEnabled: Bool?
+    private(set) var closeReason: CloseReason?
+
+    init() {
+        let stream = AsyncStream.makeStream(of: TranslationEvent.self)
+        events = stream.stream
+        continuation = stream.continuation
+    }
+
+    func connect() async throws {
+        didConnect = true
+    }
+
+    func setMicrophoneEnabled(_ enabled: Bool) async {
+        microphoneEnabled = enabled
+    }
+
+    func setOutputEnabled(_ enabled: Bool) async {
+        outputEnabled = enabled
+    }
+
+    func close(reason: CloseReason) async {
+        closeReason = reason
+        continuation.finish()
+    }
+
+    func emit(_ event: TranslationEvent) {
+        continuation.yield(event)
     }
 }
 
 final class SessionOrchestratorTests: XCTestCase {
-    var store: TranslationSessionStore!
-    var mockAPI: MockMockSessionAPI!
-    var cancellables: Set<AnyCancellable>!
-    
     @MainActor
-    override func setUp() {
-        super.setUp()
-        mockAPI = MockMockSessionAPI()
-        
-        let container = DependencyContainer(environment: .development, sessionAPI: mockAPI, configAPI: mockAPI)
-        store = TranslationSessionStore(dependencies: container)
-        cancellables = Set<AnyCancellable>()
+    func testSuccessfulSessionCreationUsesMockLegAndBecomesActive() async throws {
+        let api = makeConfiguredAPI()
+        let leg = MockTranslationLeg()
+        let container = DependencyContainer(environment: .development, sessionAPI: api, configAPI: api)
+        let store = TranslationSessionStore(dependencies: container) { _, _, _ in leg }
+
+        await store.startSession(mode: .oneWayRuToEn)
+
+        XCTAssertEqual(store.state, .connecting)
+        XCTAssertTrue(leg.didConnect)
+        XCTAssertEqual(api.lastRequest?.mode, .oneWayRuToEn)
+        XCTAssertEqual(api.lastRequest?.legs.first?.clientLegId, "ru-to-en")
+        XCTAssertNotNil(UUID(uuidString: try XCTUnwrap(api.lastIdempotencyKey)))
+
+        let becameActive = expectation(description: "store becomes active")
+        let cancellable = store.$state.dropFirst().sink { state in
+            if state == .active { becameActive.fulfill() }
+        }
+        leg.emit(.connectionStateChanged(.connected))
+        await fulfillment(of: [becameActive], timeout: 1)
+
+        XCTAssertEqual(store.state, .active)
+        XCTAssertEqual(leg.microphoneEnabled, true)
+        XCTAssertEqual(leg.outputEnabled, true)
+        _ = cancellable
     }
-    
+
     @MainActor
-    func testSuccessfulSessionCreation() async throws {
-        // Arrange
+    func testConfigErrorStopsBeforeSessionCreation() async {
+        let api = MockSessionAPI()
+        api.configResult = .failure(BackendError.serverError(AppError(
+            code: .INVALID_APP_TOKEN,
+            message: "msg",
+            retryable: false,
+            retryAfterMs: nil,
+            traceId: "tr_01234567890123456789"
+        )))
+        let container = DependencyContainer(environment: .development, sessionAPI: api, configAPI: api)
+        let store = TranslationSessionStore(dependencies: container)
+
+        await store.startSession(mode: .oneWayRuToEn)
+
+        XCTAssertEqual(store.state, .failed(code: "INVALID_APP_TOKEN", message: "msg"))
+        XCTAssertNil(api.lastRequest)
+    }
+
+    @MainActor
+    func testKillSwitchStopsBeforeSessionCreation() async {
+        let api = makeConfiguredAPI(killSwitch: true)
+        let container = DependencyContainer(environment: .development, sessionAPI: api, configAPI: api)
+        let store = TranslationSessionStore(dependencies: container)
+
+        await store.startSession(mode: .oneWayRuToEn)
+
+        XCTAssertEqual(store.state, .failed(code: "KILL_SWITCH_ACTIVE", message: "Maintenance"))
+        XCTAssertNil(api.lastRequest)
+    }
+
+    @MainActor
+    func testDialogueModeIsRejectedBeforeNetworkCalls() async {
+        let api = MockSessionAPI()
+        let container = DependencyContainer(environment: .development, sessionAPI: api, configAPI: api)
+        let store = TranslationSessionStore(dependencies: container)
+
+        await store.startSession(mode: .dialogue)
+
+        XCTAssertEqual(
+            store.state,
+            .failed(code: "UNSUPPORTED_MODE", message: "Dialogue mode is not available yet")
+        )
+        XCTAssertNil(api.lastRequest)
+    }
+
+    private func makeConfiguredAPI(killSwitch: Bool = false) -> MockSessionAPI {
+        let api = MockSessionAPI()
         let config = AppConfig(
-            version: "1.0", killSwitch: false, killSwitchMessage: nil, modelAlias: "gpt",
-            allowedModes: [.oneWayRuToEn], allowedTargetLanguages: [.en], maxDurationSeconds: 10,
+            version: "1.0",
+            killSwitch: killSwitch,
+            killSwitchMessage: killSwitch ? "Maintenance" : nil,
+            modelAlias: "gpt",
+            allowedModes: [.oneWayRuToEn],
+            allowedTargetLanguages: [.en],
+            maxDurationSeconds: 1800,
             reconnectPolicy: ReconnectPolicy(maxAttempts: 1, backoffMs: [], disconnectedGraceMs: 0),
             outputInterruption: OutputInterruptionConfig(mode: .duckAndSwitch, delayMs: 100),
-            telemetrySampleRate: 1.0, experiments: [:]
+            telemetrySampleRate: 1,
+            experiments: [:]
         )
-        mockAPI.configResult = .success(ConfigResponse(etag: "etag", config: config, isNotModified: false))
-        
-        let leg = TranslationLegCredentials(legId: "123", clientLegId: "ru-en", targetLanguage: .en, provider: .openai, model: "gpt", clientSecret: "secret", expiresAt: "2026-07-14T10:05:00Z", callsUrl: "url")
-        let sessionResponse = CreateSessionResponse(sessionId: "s1", traceId: "t1", expiresAt: "2026-07-14T10:05:00Z", maxDurationSeconds: 10, legs: [leg], policy: SessionPolicy(maxReconnectAttempts: 1, reconnectBackoffMs: [], outputInterruption: .duckAndSwitch, outputInterruptionDelayMs: 100, telemetrySampleRate: 1.0))
-        mockAPI.sessionResult = .success(sessionResponse)
-        
-        var recordedStates: [SessionState] = []
-        store.$state.sink { state in
-            recordedStates.append(state)
-        }.store(in: &cancellables)
-        
-        // Act
-        await store.startSession(mode: .oneWayRuToEn)
-        
-        // Assert: state goes from idle -> loadingConfig -> creatingSession -> connecting
-        XCTAssertEqual(recordedStates[0], .idle)
-        XCTAssertEqual(recordedStates[1], .loadingConfig)
-        XCTAssertEqual(recordedStates[2], .creatingSession)
-        XCTAssertEqual(recordedStates[3], .connecting)
-        
-        XCTAssertNotNil(mockAPI.lastIdempotencyKey)
-    }
-    
-    @MainActor
-    func testConfigErrorStopsSession() async throws {
-        mockAPI.configResult = .failure(BackendError.serverError(AppError(code: .INVALID_APP_TOKEN, message: "msg", retryable: false, retryAfterMs: nil, traceId: "")))
-        
-        await store.startSession(mode: .oneWayRuToEn)
-        
-        XCTAssertEqual(store.state, .failed(code: "invalid_app_token", message: "msg"))
+        api.configResult = .success(ConfigResponse(etag: "etag", config: config, isNotModified: false))
+        api.sessionResult = .success(CreateSessionResponse(
+            sessionId: "ts_01234567890123456789",
+            traceId: "tr_01234567890123456789",
+            expiresAt: "2026-07-14T10:05:00Z",
+            maxDurationSeconds: 1800,
+            legs: [TranslationLegCredentials(
+                legId: "leg_01234567890123456789",
+                clientLegId: "ru-to-en",
+                targetLanguage: .en,
+                provider: .openai,
+                model: "gpt",
+                clientSecret: "secret-value",
+                expiresAt: "2026-07-14T10:05:00Z",
+                callsUrl: "https://api.openai.com/v1/realtime/translations/calls"
+            )],
+            policy: SessionPolicy(
+                maxReconnectAttempts: 1,
+                reconnectBackoffMs: [],
+                outputInterruption: .duckAndSwitch,
+                outputInterruptionDelayMs: 100,
+                telemetrySampleRate: 1
+            )
+        ))
+        return api
     }
 }
