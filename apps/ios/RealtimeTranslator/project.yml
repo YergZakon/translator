@@ -1,6 +1,10 @@
 name: RealtimeTranslator
 options:
   bundleIdPrefix: com.yergakon
+packages:
+  WebRTC:
+    url: https://github.com/stasel/WebRTC.git
+    from: 125.0.0
 targets:
   RealtimeTranslator:
     type: application
@@ -11,6 +15,8 @@ targets:
     settings:
       INFOPLIST_FILE: RealtimeTranslator/Info.plist
       PRODUCT_BUNDLE_IDENTIFIER: com.yergakon.RealtimeTranslator
+    dependencies:
+      - package: WebRTC
   RealtimeTranslatorTests:
     type: bundle.unit-test
     platform: iOS
