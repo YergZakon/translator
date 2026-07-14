@@ -53,7 +53,12 @@ jobs:
 
           simulator_id="$(
             xcrun simctl list devices available --json |
-              jq -r '[.devices[][] | select(.isAvailable == true)][0].udid // empty'
+              jq -r '[
+                .devices | to_entries[] |
+                select(.key | contains(".iOS-")) |
+                .value[] |
+                select(.isAvailable == true)
+              ][0].udid // empty'
           )"
 
           if [[ -z "$simulator_id" ]]; then
