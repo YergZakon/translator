@@ -11,15 +11,18 @@ final class PR3Tests: XCTestCase {
     // 2. Contract-valid IDs
     func testMockClientGeneratesValidIDs() async throws {
         let client = MockBackendClient()
-        let response = try await client.createSession(request: CreateTranslationSessionRequest(
-            mode: .oneWayRuToEn,
-            sourceLocaleHint: nil,
-            legs: [
-                TranslationLegRequest(clientLegId: "leg1", targetLanguage: .en)
-            ],
-            app: AppInfo(version: "1.0", build: 1),
-            device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
-        ))
+        let response = try await client.createSession(
+            request: CreateTranslationSessionRequest(
+                mode: .oneWayRuToEn,
+                sourceLocaleHint: nil,
+                legs: [
+                    TranslationLegRequest(clientLegId: "leg1", targetLanguage: .en)
+                ],
+                app: AppInfo(version: "1.0", build: 1),
+                device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
+            ),
+            idempotencyKey: UUID().uuidString
+        )
 
         // traceId: "tr_" + 32 hex chars
         XCTAssertTrue(response.traceId.hasPrefix("tr_"))

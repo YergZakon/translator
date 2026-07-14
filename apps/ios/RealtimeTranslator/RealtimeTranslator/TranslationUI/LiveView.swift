@@ -5,7 +5,6 @@ struct LiveView: View {
     let mode: TranslationMode
     @Environment(\.presentationMode) var presentationMode
     @State private var isPreflightPassed = false
-    @State private var mockTimer: Timer? = nil
     @State private var volumeLevels: [CGFloat] = Array(repeating: 0.1, count: 20)
     @State private var showFeedback = false
     @State private var sessionDuration: TimeInterval = 0
@@ -216,27 +215,24 @@ struct LiveView: View {
     private var statusColor: Color {
         switch sessionStore.state {
         case .idle: return .gray
-        case .preparingAudio, .requestingSecret, .negotiatingWebRTC: return .orange
-        case .ready: return .green
-        case .listening: return .blue
-        case .translating: return .purple
-        case .networkDegraded: return .yellow
+        case .loadingConfig, .creatingSession, .connecting: return .orange
+        case .active: return .green
         case .reconnecting: return .red
-        case .error: return .red
-        case .ending: return .gray
+        case .failed: return .red
+        case .completed: return .gray
         }
     }
 
     private var isPulsing: Bool {
         switch sessionStore.state {
-        case .listening, .translating, .reconnecting: return true
+        case .connecting, .active, .reconnecting: return true
         default: return false
         }
     }
 
     private var isListeningOrTranslating: Bool {
         switch sessionStore.state {
-        case .listening, .translating: return true
+        case .active: return true
         default: return false
         }
     }
@@ -245,38 +241,11 @@ struct LiveView: View {
         Task {
             await sessionStore.startSession(mode: mode)
 
+            if case .failed = sessionStore.state { return }
+
             // Timer for duration
             timerSubscription = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 sessionDuration += 1
-            }
-
-            // Start mock audio wave and text deltas
-            var counter = 0
-            mockTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { _ in
-                counter += 1
-
-                // Simulating audio levels
-                if isListeningOrTranslating {
-                    for i in 0..<volumeLevels.count {
-                        volumeLevels[i] = CGFloat.random(in: 0.1...0.8)
-                    }
-                }
-
-                let side: Side = (mode == .dialogue && counter % 2 == 0) ? .englishSpeaker : .russianSpeaker
-                let text = side == .russianSpeaker ? "Какая будет погода сегодня? " : "It should be sunny and warm. "
-                let segId = "seg_\(counter)"
-
-                sessionStore.appendTranscriptDelta(id: segId, text: text, side: side, isFinal: false)
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    sessionStore.appendTranscriptDelta(id: segId, text: side == .russianSpeaker ? "Пожалуйста, подскажите." : "Enjoy your day!", side: side, isFinal: true)
-                    sessionStore.completeSegment(id: segId)
-
-                    // Reset volume waves
-                    for i in 0..<volumeLevels.count {
-                        volumeLevels[i] = 0.1
-                    }
-                }
             }
         }
     }
@@ -288,9 +257,7 @@ struct LiveView: View {
     }
 
     private func cleanupTimers() {
-        mockTimer?.invalidate()
         timerSubscription?.invalidate()
-        mockTimer = nil
         timerSubscription = nil
     }
 

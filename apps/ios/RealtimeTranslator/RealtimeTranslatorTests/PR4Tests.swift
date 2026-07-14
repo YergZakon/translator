@@ -77,11 +77,9 @@ final class PR4Tests: XCTestCase {
         let decoder = EventDecoder()
         let event = decoder.decodeEvent(from: json, side: .englishSpeaker)
 
-        guard case .connectionStateChanged(let state) = event else {
-            XCTFail("Expected connectionStateChanged event")
+        guard case .sessionClosed = event else {
+            XCTFail("Expected sessionClosed event")
             return
         }
-
-        XCTAssertEqual(state, .disconnected)
     }
 }

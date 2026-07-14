@@ -2,7 +2,7 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 12:40 +05:00
+- Обновлено: 2026-07-14 13:02 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
 - Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
@@ -78,6 +78,7 @@
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` / PR #3 | iOS client layer | API-01 | Review findings closed; PR-wide diff clean; macOS build/XCTest green |
 | IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | DONE | `antigravity/ios-ios-03-webrtc` / PR #4 | transport layer | BE-02, IOS-01 | Review findings closed; SPM resolve, Xcode build and XCTest green; physical iPhone check remains separate/open |
+| IOS-04 | iOS | Session Orchestrator Integration | Antigravity + Codex review | DONE | `antigravity/ios-ios-04-session-orchestrator` / PR #7 | `LiveBackendClient.swift`, `TranslationSessionStore.swift`, UI state mapping, isolated orchestrator/API tests | IOS-02, IOS-03 | Codex compile/contract findings fixed; diff clean; macOS build/XCTest run `29316445018` green; one-way scope only |
 
 ## 4. Реестр собственных API P0
 
@@ -144,13 +145,13 @@ Antigravity владеет реализацией. Изменение семан
 
 | Interface/тип | Ответственность | Owner | Status |
 |---|---|---|---|
-| `TranslationSessionStore` / reducer | Единый источник UI state | Antigravity | PLANNED |
-| `SessionAPI` | Create/recreate/complete session | Antigravity | PLANNED |
-| `ConfigAPI` | Remote config/ETag | Antigravity | PLANNED |
+| `TranslationSessionStore` / reducer | Единый источник UI state | Antigravity | IMPLEMENTED — initial RU→EN scope; reconnect/dialogue pending |
+| `SessionAPI` | Create/recreate/complete session | Antigravity | PARTIAL — create implemented; recreate/complete pending |
+| `ConfigAPI` | Remote config/ETag | Antigravity | IMPLEMENTED |
 | `FeedbackAPI` | Submit/update feedback | Antigravity | PLANNED |
 | `AudioSessionController` | AVAudioSession lifecycle/routes | Antigravity | PLANNED |
 | `OutputArbiter` | Не допустить одновременный audible output | Antigravity | PLANNED |
-| `EventDecoder` | Tolerant decoding Realtime events | Antigravity | PLANNED |
+| `EventDecoder` | Tolerant decoding Realtime events | Antigravity | IMPLEMENTED — simulator tests; provider E2E pending |
 | `TelemetryClient` + `Redactor` | Allowlisted event batching без текста/audio | Antigravity | PLANNED |
 
 ### Планируемые backend functions/services
@@ -217,9 +218,10 @@ Antigravity владеет реализацией. Изменение семан
 | H-002 | Antigravity | Codex | Скелет iOS-приложения и настройки окружений готовы | `apps/ios/RealtimeTranslator` | Соответствует структуре модулей из PRD 9.1, проектный файл готов к открытию в Xcode | На Windows сборка не тестировалась; требуется запуск на macOS | Успешное открытие и сборка RealtimeTranslator.xcodeproj на macOS | OPEN |
 | H-003 | Antigravity | Codex | Интерфейсы экранов и стейт-машина готовы к интеграции | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | Протестировано переключение состояний на симулированном потоке | Нет | Codex может использовать готовые экраны и моки для API-01/BE-01 | OPEN |
 | H-004 | Codex | Antigravity | Draft HTTP API P0, fixtures и ADR-0001 готовы для IOS-02 | `contracts/`, `docs/adr/0001-monorepo-backend-and-contract-first.md` | Redocly: valid, 0 warnings; JSON fixtures parse; Swift Codable review passed | Telemetry `properties` остаются draft до TEL-01; secret TTL нельзя предполагать | Подтвердить D-004; декодировать fixtures и вернуть замечания к DTO/error mapping | CLOSED |
-| H-005 | Codex | Antigravity | Реализация health/config по принятому контракту, включая ETag/304 и error envelope | `apps/backend/` | Typecheck; 6/6 HTTP inject tests; production build | До BE installation flow app tokens задаются через `APP_TOKENS`; это prototype-only bootstrap | Подключить `ConfigAPI`/mock к полям AppConfig и проверить 200/304/401 | OPEN |
+| H-005 | Codex | Antigravity | Реализация health/config по принятому контракту, включая ETag/304 и error envelope | `apps/backend/` | Typecheck; 6/6 HTTP inject tests; production build | До BE installation flow app tokens задаются через `APP_TOKENS`; это prototype-only bootstrap | Подключить `ConfigAPI`/mock к полям AppConfig и проверить 200/304/401 | CLOSED |
 | H-006 | Codex | Antigravity | BE-02 создаёт 1–2 short-lived translation secrets через official translation endpoint | `apps/backend/src/services/openai-secret-broker.ts`, `session-service.ts`, `POST /v1/translation-sessions` | Typecheck; 18/18 tests; build; mocked upstream 200/429/malformed/timeout | Реальный OpenAI вызов и physical iPhone не выполнялись; idempotency process-local; app token bootstrap static | После исправлений PR #3/#4 выполнить stage E2E: backend → secret → SDP → remote audio/transcript | OPEN |
 | H-007 | Codex | Antigravity | Backend CI и production Docker image готовы к review | PR #6; `.github/workflows/backend-ci.yml`, `.dockerignore`, `apps/backend/Dockerfile` | Runs `29314935253`, `29315055856` green, включая Docker build/non-root/secret policy/health smoke | Runtime secrets всё ещё задаются через prototype env до BE-03; stage deploy не выполнен | Antigravity confirmed path scope, production-only runtime, non-root user, secret isolation and health contract | CLOSED |
+| H-008 | Antigravity | Codex | IOS-04: Session API & Orchestrator переданы и исправлены по review | `apps/ios/RealtimeTranslator/`, PR #7 | Contract/static review; diff clean; isolated mock-leg and URLProtocol XCTest; macOS run `29316445018` green | Dialogue/reconnect не входят в initial IOS-04; stage/WebRTC/physical iPhone pending; prototype `APP_TOKEN` injected through scheme environment | Green macOS build/XCTest achieved; physical iPhone E2E remains open in H-006 | CLOSED |
 
 ## 9. Хронология
 
@@ -227,6 +229,9 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 13:02 +05:00 | Codex | IOS-04 macOS acceptance | Legacy PR3 test updated for mandatory idempotency key; IOS-04 app and isolated test target compiled and passed on GitHub-hosted Mac | Exact head `a7b01b0`; Actions run `29316445018` success: XcodeGen, build, XCTest | Publish acceptance record; require final exact-head green check; merge PR #7; keep H-006 stage/physical E2E open |
+| 2026-07-14 12:53 +05:00 | Codex | IOS-04 integration review | IOS-04 merged with current `main`; fixed compile-breaking state/event/configuration mismatches, OpenAPI config headers/error mapping, hardcoded token, real-WebRTC unit test, UI stale states and mock transcript generator | Conflict histories preserved; `git diff --check` clean; no Windows Swift toolchain | Push reviewed branch; open draft PR; require macOS build/XCTest before merge; keep stage/physical E2E open |
+| 2026-07-14 12:45 +05:00 | Antigravity | IOS-04 complete & Handoff | Реализован `LiveBackendClient`, оркестратор в `TranslationSessionStore`, состояния приложения и `Idempotency-Key`. Добавлены юнит-тесты `SessionOrchestratorTests` | Тесты оркестратора; компилируется | Codex review draft PR IOS-04; развертывание BE-02 на Stage для E2E |
 | 2026-07-14 12:40 +05:00 | Antigravity / Codex | CI-02 accepted | Antigravity independently reviewed exact PR #6 head `c687177`; H-007 closed and CI-02 marked DONE | Verdict `APPROVED`; final Actions run `29315055856` green on exact head | Push acceptance record; require final exact-head CI; merge PR #6; inspect IOS-04 |
 | 2026-07-14 12:34 +05:00 | Codex | CI-02 in review | Опубликован draft PR #6 с Node 22/pnpm backend CI и multi-stage non-root production image | Actions run `29314935253`: all steps success, включая Docker build, image policy и health smoke | Antigravity reviews H-007; после acceptance merge PR #6 и начать BE-03 |
 | 2026-07-14 12:26 +05:00 | Codex | CI-02 start | Создан отдельный worktree от `main`; зарезервированы backend CI и Docker files | `origin/main` = `32b5964`; Codex/Antigravity worktrees физически разделены | Реализовать frozen-install/typecheck/test/build workflow и production container; затем draft PR/review |

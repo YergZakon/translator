@@ -75,7 +75,7 @@ class EventDecoder {
                 return .transcriptDelta(segment)
             }
         case "session.closed":
-            return .connectionStateChanged(.disconnected)
+            return .sessionClosed
         case "error":
             return .error(TranslationError(code: "SERVER_ERROR", message: "Received error from server", retryable: false))
         default:

@@ -63,5 +63,6 @@ enum TranslationEvent {
     case transcriptDelta(TranscriptSegment)
     case audioReceived(Data)
     case connectionStateChanged(LegConnectionState)
+    case sessionClosed
     case error(TranslationError)
 }

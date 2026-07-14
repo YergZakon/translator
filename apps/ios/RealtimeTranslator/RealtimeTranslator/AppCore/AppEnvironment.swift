@@ -5,6 +5,8 @@ enum AppEnvironment: String, Codable, CaseIterable {
     case staging
     case production
 
+    static var current: AppEnvironment = .development
+
     var baseURL: URL {
         switch self {
         case .development:
@@ -14,5 +16,9 @@ enum AppEnvironment: String, Codable, CaseIterable {
         case .production:
             return URL(string: "https://api.translator.internal")!
         }
+    }
+
+    var prototypeAppToken: String {
+        ProcessInfo.processInfo.environment["APP_TOKEN"] ?? ""
     }
 }
