@@ -2,7 +2,7 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 13:21 +05:00
+- Обновлено: 2026-07-14 13:23 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
 - Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
@@ -72,7 +72,7 @@
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
 | BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity contract/security review passed via handoff |
-| BE-03 | Backend | Installation registration, persistent app-token auth и PostgreSQL storage | Codex | IN_PROGRESS | `codex/be-03-installation-auth` | `POST /v1/installations`, hash-only token repository/verifier, migration, integration tests | BE-02, API-01, CI-02 | New/recovery rotation, old-token rejection, restart persistence, no raw token at rest/logs |
+| BE-03 | Backend | Installation registration, persistent app-token auth и PostgreSQL storage | Codex | IN_REVIEW | `codex/be-03-installation-auth` / PR #8 | `POST /v1/installations`, hash-only token repository/verifier, migration, integration tests | BE-02, API-01, CI-02 | Actions run `29317794206`: 27/27 tests including PostgreSQL, build, container policy/smoke green; Antigravity review pending |
 | CI-01 | Shared | macOS CI для XcodeGen, iOS build и unit tests | Codex | DONE | PR #3 / commit `03fbfac` | `.github/workflows/ios-ci.yml` | IOS-01, IOS-02 | Runs `29311153309`, `29311548132`: XcodeGen, Xcode 16.4 simulator build и XCTest passed |
 | CI-02 | Backend | GitHub Actions и production Docker image для backend | Codex | DONE | `codex/ci-02-backend-container` / PR #6 | `.github/workflows/backend-ci.yml`, `.dockerignore`, `apps/backend/Dockerfile` | BE-02 | Runs `29314935253`, `29315055856` green; Antigravity independent review APPROVED |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
@@ -162,7 +162,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Service/function | Вход/выход | Инвариант | Owner | Status |
 |---|---|---|---|---|
-| `InstallationService.register` | public installation id → app token | Token хранится только как hash | Codex | PLANNED |
+| `InstallationService.register` | public installation id → app token | Token хранится только как hash; recovery rotates old token | Codex | IMPLEMENTED — PR #8 in review |
 | `ConfigService.getActiveConfig` | installation/build → config + ETag | Kill switch проверяется до создания session | Codex | IMPLEMENTED |
 | `HealthService.getStatus` | readiness state → minimal health response | Не раскрывает secrets или внутреннюю topology | Codex | IMPLEMENTED |
 | `SessionService.create` | validated request → app session + 1–2 legs | Одна операция/результат на idempotency key | Codex | IMPLEMENTED — process-local до BE-03/PostgreSQL |
@@ -224,6 +224,7 @@ Antigravity владеет реализацией. Изменение семан
 | H-006 | Codex | Antigravity | BE-02 создаёт 1–2 short-lived translation secrets через official translation endpoint | `apps/backend/src/services/openai-secret-broker.ts`, `session-service.ts`, `POST /v1/translation-sessions` | Typecheck; 18/18 tests; build; mocked upstream 200/429/malformed/timeout | Реальный OpenAI вызов и physical iPhone не выполнялись; idempotency process-local; app token bootstrap static | После исправлений PR #3/#4 выполнить stage E2E: backend → secret → SDP → remote audio/transcript | OPEN |
 | H-007 | Codex | Antigravity | Backend CI и production Docker image готовы к review | PR #6; `.github/workflows/backend-ci.yml`, `.dockerignore`, `apps/backend/Dockerfile` | Runs `29314935253`, `29315055856` green, включая Docker build/non-root/secret policy/health smoke | Runtime secrets всё ещё задаются через prototype env до BE-03; stage deploy не выполнен | Antigravity confirmed path scope, production-only runtime, non-root user, secret isolation and health contract | CLOSED |
 | H-008 | Antigravity | Codex | IOS-04: Session API & Orchestrator переданы и исправлены по review | `apps/ios/RealtimeTranslator/`, PR #7 | Contract/static review; diff clean; isolated mock-leg and URLProtocol XCTest; macOS run `29316445018` green | Dialogue/reconnect не входят в initial IOS-04; stage/WebRTC/physical iPhone pending; prototype `APP_TOKEN` injected through scheme environment | Green macOS build/XCTest achieved; physical iPhone E2E remains open in H-006 | CLOSED |
+| H-009 | Codex | Antigravity | BE-03 persistent installation auth готов к contract/security review и IOS-05 integration | PR #8; `POST /v1/installations`; PostgreSQL migration/repository; async token verifier | Run `29317794206`: 27/27 tests, PostgreSQL persistence/rotation, build, non-root image policy and health smoke green | Attestation remains optional/not verified; session idempotency still process-local; stage not deployed | Confirm Swift DTO, 201/200 recovery, Keychain/401 flow, forbidden semantics and no token leakage; implement IOS-05 separately | OPEN |
 
 ## 9. Хронология
 
@@ -231,6 +232,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 13:23 +05:00 | Codex | BE-03 draft / CI green | Опубликован draft PR #8; PostgreSQL-backed installation auth и production container проверены на exact head `2fbba05` | Actions run `29317794206`: 27/27 tests, 0 skipped, build, secret/image policy and health smoke success | Antigravity reviews H-009 and starts IOS-05; Codex fixes findings, records final exact-head CI and merges |
 | 2026-07-14 13:21 +05:00 | Codex | BE-03 implementation | Реализованы versioned PostgreSQL migration, installation repository/service, hash-only async token verifier, create/recovery rotation и sanitized forbidden flow; backend CI получил PostgreSQL service | Typecheck; 26/26 runnable tests pass + PostgreSQL test locally skipped; production build; diff/key scans clean | Push draft PR; GitHub CI must execute PostgreSQL persistence test and container smoke; Antigravity reviews contract/security for IOS-05 |
 | 2026-07-14 13:10 +05:00 | Codex | BE-03 start / IOS-05 parallel handoff | Создан отдельный worktree `codex/be-03-installation-auth` от merge PR #7; зарезервированы persistent installation auth и параллельный iOS Keychain consumer | `origin/main` = `3823124`; worktrees physically isolated | Codex implements PostgreSQL registration/token rotation; Antigravity starts IOS-05 without changing backend/contracts |
 | 2026-07-14 13:02 +05:00 | Codex | IOS-04 macOS acceptance | Legacy PR3 test updated for mandatory idempotency key; IOS-04 app and isolated test target compiled and passed on GitHub-hosted Mac | Exact head `a7b01b0`; Actions run `29316445018` success: XcodeGen, build, XCTest | Publish acceptance record; require final exact-head green check; merge PR #7; keep H-006 stage/physical E2E open |
