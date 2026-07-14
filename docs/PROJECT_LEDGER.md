@@ -1,13 +1,13 @@
 # PROJECT LEDGER — Realtime Translator iOS
 
-Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
+Единый редактируемый источник истины для Codex, Claude Code и владельца проекта. Записи Antigravity до перехода сохранены как история авторства.
 
-- Обновлено: 2026-07-14 13:35 +05:00
+- Обновлено: 2026-07-14 15:50 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
-- Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
-- Codex working copy: `C:\Users\yergali\Desktop\переводчик`, ветка `codex/be-02-secret-broker`
-- Antigravity worktree: `C:\Users\yergali\Desktop\translator-antigravity`; отдельная ветка на каждую iOS-задачу
+- Git: `origin/main` = `8aa7074` после merge PR #10 (Claude Code handoff); репозиторий `https://github.com/YergZakon/translator.git`
+- Codex: backend owner; BE-03 merged, следующая backend-задача требует отдельной reservation/worktree
+- Claude Code: отдельный worktree/clone; новые iOS-ветки `claude/ios-<task-id>-<slug>`
 - Общий физический checkout для двух моделей запрещён
 - Главный принцип архитектуры: прямой WebRTC между iOS и OpenAI; backend выдаёт короткоживущие secrets и не находится в медиапути
 
@@ -15,7 +15,7 @@
 
 ### Codex — backend owner
 
-- Node.js + TypeScript backend; Fastify предложен в ADR-0001 и ожидает review.
+- Node.js + TypeScript backend; Fastify принят в D-004/ADR-0001.
 - PostgreSQL: installations, sessions, legs, metrics, errors, feedback, config versions.
 - Auth/app token, OpenAI secret broker, privacy-preserving safety identifier.
 - Quotas, rate limits, daily budget, kill switch, feature flags и remote config.
@@ -23,7 +23,7 @@
 - Telemetry ingestion, redaction, structured logs, traces, dashboards/alerts.
 - Backend unit/contract/integration tests, Docker и backend CI.
 
-### Antigravity — iOS owner
+### Claude Code — iOS owner
 
 - Swift/SwiftUI приложение и экраны Home, Preflight, Live, Result, Diagnostics.
 - TranslationSessionStore/reducer и пользовательская state machine.
@@ -72,6 +72,7 @@
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
 | BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity contract/security review passed via handoff |
+| BE-03 | Backend | Installation registration, persistent app-token auth и PostgreSQL storage | Codex | DONE | `codex/be-03-installation-auth` / PR #8 | `POST /v1/installations`, hash-only token repository/verifier, migration, integration tests | BE-02, API-01, CI-02 | Exact-head run `29317931855`: 27/27 tests including PostgreSQL, build, container policy/smoke green; Claude Code contract/security review APPROVED |
 | CI-01 | Shared | macOS CI для XcodeGen, iOS build и unit tests | Codex | DONE | PR #3 / commit `03fbfac` | `.github/workflows/ios-ci.yml` | IOS-01, IOS-02 | Runs `29311153309`, `29311548132`: XcodeGen, Xcode 16.4 simulator build и XCTest passed |
 | CI-02 | Backend | GitHub Actions и production Docker image для backend | Codex | DONE | `codex/ci-02-backend-container` / PR #6 | `.github/workflows/backend-ci.yml`, `.dockerignore`, `apps/backend/Dockerfile` | BE-02 | Runs `29314935253`, `29315055856` green; Antigravity independent review APPROVED |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
@@ -140,20 +141,20 @@ enum TranslationMode {
 }
 ```
 
-Antigravity владеет реализацией. Изменение семантики методов или событий требует shared decision.
+Claude Code владеет дальнейшим развитием реализации. Исторический код создан Antigravity; изменение семантики методов или событий требует shared decision.
 
 ### Планируемые iOS interfaces
 
 | Interface/тип | Ответственность | Owner | Status |
 |---|---|---|---|
-| `TranslationSessionStore` / reducer | Единый источник UI state | Antigravity | IMPLEMENTED — initial RU→EN scope; reconnect/dialogue pending |
-| `SessionAPI` | Create/recreate/complete session | Antigravity | PARTIAL — create implemented; recreate/complete pending |
-| `ConfigAPI` | Remote config/ETag | Antigravity | IMPLEMENTED |
-| `FeedbackAPI` | Submit/update feedback | Antigravity | PLANNED |
-| `AudioSessionController` | AVAudioSession lifecycle/routes | Antigravity | PLANNED |
-| `OutputArbiter` | Не допустить одновременный audible output | Antigravity | PLANNED |
-| `EventDecoder` | Tolerant decoding Realtime events | Antigravity | IMPLEMENTED — simulator tests; provider E2E pending |
-| `TelemetryClient` + `Redactor` | Allowlisted event batching без текста/audio | Antigravity | PLANNED |
+| `TranslationSessionStore` / reducer | Единый источник UI state | Claude Code | IMPLEMENTED — initial RU→EN scope; reconnect/dialogue pending |
+| `SessionAPI` | Create/recreate/complete session | Claude Code | PARTIAL — create implemented; recreate/complete pending |
+| `ConfigAPI` | Remote config/ETag | Claude Code | IMPLEMENTED |
+| `FeedbackAPI` | Submit/update feedback | Claude Code | PLANNED |
+| `AudioSessionController` | AVAudioSession lifecycle/routes | Claude Code | PLANNED |
+| `OutputArbiter` | Не допустить одновременный audible output | Claude Code | PLANNED |
+| `EventDecoder` | Tolerant decoding Realtime events | Claude Code | IMPLEMENTED — simulator tests; provider E2E pending |
+| `TelemetryClient` + `Redactor` | Allowlisted event batching без текста/audio | Claude Code | PLANNED |
 
 ### Планируемые backend functions/services
 
@@ -161,7 +162,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Service/function | Вход/выход | Инвариант | Owner | Status |
 |---|---|---|---|---|
-| `InstallationService.register` | public installation id → app token | Token хранится только как hash | Codex | PLANNED |
+| `InstallationService.register` | public installation id → app token | Token хранится только как hash; recovery rotates old token | Codex | IMPLEMENTED — PR #8 in review |
 | `ConfigService.getActiveConfig` | installation/build → config + ETag | Kill switch проверяется до создания session | Codex | IMPLEMENTED |
 | `HealthService.getStatus` | readiness state → minimal health response | Не раскрывает secrets или внутреннюю topology | Codex | IMPLEMENTED |
 | `SessionService.create` | validated request → app session + 1–2 legs | Одна операция/результат на idempotency key | Codex | IMPLEMENTED — process-local до BE-03/PostgreSQL |
@@ -200,10 +201,11 @@ Antigravity владеет реализацией. Изменение семан
 
 | ID | Дата | Статус | Решение | Автор | Нужен review | Последствия |
 |---|---|---|---|---|---|---|
-| D-001 | 2026-07-14 | ACCEPTED | Codex владеет backend; Antigravity владеет iOS; contracts shared | Codex | Antigravity должен подтвердить при старте | API changes проходят двусторонний review |
+| D-001 | 2026-07-14 | SUPERSEDED | Codex владеет backend; Antigravity владеет iOS; contracts shared | Codex | Заменено D-005 | Историческая схема ролей до перехода на Claude Code |
 | D-002 | 2026-07-14 | ACCEPTED | Выбрать monorepo с `apps/backend`, `apps/ios`, `contracts`, `docs` | Codex | Antigravity | Упрощает общий ledger и contract-first workflow |
 | D-003 | 2026-07-14 | ACCEPTED | Сначала OpenAPI + fixtures, затем параллельно backend producer и iOS consumer | Codex | Antigravity | Снижает взаимную блокировку |
 | D-004 | 2026-07-14 | ACCEPTED | Fastify + TypeScript + pnpm workspaces для backend P0 | Codex | Antigravity | Быстрый bootstrap, JSON Schema validation и HTTP inject tests |
+| D-005 | 2026-07-14 | ACCEPTED | Claude Code заменяет Antigravity как текущий iOS owner; историческое авторство и существующая ветка PR #9 сохраняются | Владелец проекта | Codex + Claude Code | Новые iOS-ветки используют `claude/`; Claude первым делом review PR #8, затем завершает интеграцию PR #9 |
 
 Шаблон новой записи:
 
@@ -223,7 +225,9 @@ Antigravity владеет реализацией. Изменение семан
 | H-006 | Codex | Antigravity | BE-02 создаёт 1–2 short-lived translation secrets через official translation endpoint | `apps/backend/src/services/openai-secret-broker.ts`, `session-service.ts`, `POST /v1/translation-sessions` | Typecheck; 18/18 tests; build; mocked upstream 200/429/malformed/timeout | Реальный OpenAI вызов и physical iPhone не выполнялись; idempotency process-local; app token bootstrap static | После исправлений PR #3/#4 выполнить stage E2E: backend → secret → SDP → remote audio/transcript | OPEN |
 | H-007 | Codex | Antigravity | Backend CI и production Docker image готовы к review | PR #6; `.github/workflows/backend-ci.yml`, `.dockerignore`, `apps/backend/Dockerfile` | Runs `29314935253`, `29315055856` green, включая Docker build/non-root/secret policy/health smoke | Runtime secrets всё ещё задаются через prototype env до BE-03; stage deploy не выполнен | Antigravity confirmed path scope, production-only runtime, non-root user, secret isolation and health contract | CLOSED |
 | H-008 | Antigravity | Codex | IOS-04: Session API & Orchestrator переданы и исправлены по review | `apps/ios/RealtimeTranslator/`, PR #7 | Contract/static review; diff clean; isolated mock-leg and URLProtocol XCTest; macOS run `29316445018` green | Dialogue/reconnect не входят в initial IOS-04; stage/WebRTC/physical iPhone pending; prototype `APP_TOKEN` injected through scheme environment | Green macOS build/XCTest achieved; physical iPhone E2E remains open in H-006 | CLOSED |
+| H-009 | Codex | Claude Code | BE-03 persistent installation auth готов к IOS-05 integration | PR #8 exact head `d2a85eb`; `POST /v1/installations`; PostgreSQL migration/repository; async token verifier | Claude Code APPROVED contract/security review; exact-head run `29317931855`: 27/27 tests, PostgreSQL persistence/rotation, build, non-root image policy and health smoke green | Attestation remains optional/not verified; session idempotency still process-local; stage not deployed | Swift DTO, 201/200 recovery, Keychain/401 flow, forbidden semantics and no token leakage confirmed | CLOSED |
 | H-010 | Antigravity | Codex | IOS-05: InstallationAPI и device-only Keychain app-token менеджмент переданы на review | `apps/ios/RealtimeTranslator/`, PR #9 | Injected secure-store tests; URLProtocol retry-once tests; exact head `0034f1e`, macOS run `29321837174` green, 20/20 XCTest | Stage/physical E2E pending; BE-03 review tracked separately as H-009 in PR #8 | Green exact-head macOS build/XCTest and Codex security/contract acceptance achieved | CLOSED |
+| H-011 | Codex | Claude Code | Контекст iOS-направления, PR #8/#9, security invariants и безопасный порядок интеграции | `CLAUDE.md`, `docs/CLAUDE_CODE_HANDOFF.md`; PR #8/#9 | PR #8 verdict APPROVED, backend merged; coordination docs синхронизированы с `main`; `git diff --check` clean | Stage/physical iPhone E2E открыт | После merge PR #10 Claude синхронизирует PR #9 без потери H-009/H-010 и получает exact-head green iOS CI | OPEN |
 
 ## 9. Хронология
 
@@ -231,10 +235,17 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 15:50 +05:00 | Claude Code | IOS-05 sync with main | Ветка PR #9 обновлена merge commit из `origin/main` = `8aa7074` (включает merged PR #8 и PR #10); конфликт ledger разрешён без потери записей; backend не изменён | IOS-05 IN_REVIEW, BE-03 DONE, H-009/H-010 CLOSED, H-011 OPEN, D-005 и обе хронологии сохранены; `git diff origin/main...HEAD -- apps/backend` пуст; `git diff --check` clean | Push продолжения ветки PR #9; exact-head iOS CI (XcodeGen, build, XCTest); merge PR #9 только по разрешению владельца |
+| 2026-07-14 15:29 +05:00 | Claude Code | PR #10 sync with main | Ветка `agent/claude-code-handoff` обновлена merge commit из `origin/main` (`ecdba53`, включает merged PR #8); конфликт ledger разрешён без потери записей | BE-03 DONE и H-009 CLOSED сохранены; D-005/H-011 и обе хронологии сохранены; `git diff --check` clean | Owner/Codex мержит PR #10; затем синхронизация PR #9 с новым `main` и exact-head iOS CI |
+| 2026-07-14 15:15 +05:00 | Claude Code / Codex | BE-03 accepted | Claude Code independently reviewed PR #8 exact head `d2a85eb`; contract, Swift DTO compatibility, hash-only token persistence, atomic rotation, 401/403 semantics, migrations, logs and production path accepted with no blocking findings | Verdict `APPROVED`; exact-head Actions run `29317931855` success; backend unchanged during review | Close H-009, merge PR #8; then sync PR #9 with new `main` and require final exact-head iOS CI |
+| 2026-07-14 14:55 +05:00 | Владелец проекта / Codex | iOS ownership transition | Claude Code назначен текущим iOS owner вместо Antigravity; добавлены auto-loaded instructions и детальный handoff с exact SHA/CI/checklists | PR #8 head `d2a85eb` и run `29317931855` green; PR #9 head `001786d` и run `29322484021` green | Claude выполняет read-only review PR #8/H-009; после merge backend завершает sync/final CI PR #9 |
 | 2026-07-14 14:36 +05:00 | Codex | IOS-05 macOS acceptance | Hardened token lifecycle and DTO secrecy; made Keychain update atomic/device-only and testable; corrected contract IDs/device class; retained single-flight retry-once; moved POST-body assertion out of URLProtocol transport behavior; stabilized CI on `macos-15-intel` | Exact head `0034f1e`; Actions run `29321837174` success: XcodeGen, app build, 20/20 XCTest; `git diff --check` clean | Antigravity explicitly reviews BE-03 PR #8/H-009; merge BE-03; sync `main` into IOS-05 and run final exact-head CI before merge |
 | 2026-07-14 13:35 +05:00 | Codex | IOS-05 integration review | Removed prototype token fallback; made token DTO decode-only/redacted; changed Keychain to atomic device-only upsert with injected test store; added single-flight concurrent 401 recovery; corrected contract IDs/device class and handoff ID | Static contract/security review; macOS CI pending on PR #9 | Push review fixes; require exact-head build/XCTest; merge BE-03 first only after Antigravity H-009 review; then sync/merge IOS-05 |
+| 2026-07-14 13:23 +05:00 | Codex | BE-03 draft / CI green | Опубликован draft PR #8; PostgreSQL-backed installation auth и production container проверены на exact head `2fbba05` | Actions run `29317794206`: 27/27 tests, 0 skipped, build, secret/image policy and health smoke success | Antigravity reviews H-009 and starts IOS-05; Codex fixes findings, records final exact-head CI and merges |
 | 2026-07-14 13:23 +05:00 | Antigravity | IOS-05 implementation handoff | Completed initial code implementation and internal audit | Antigravity verdict CLEAN; Codex acceptance review pending | Draft PR #9; handoff H-010 recorded after ID reconciliation |
+| 2026-07-14 13:21 +05:00 | Codex | BE-03 implementation | Реализованы versioned PostgreSQL migration, installation repository/service, hash-only async token verifier, create/recovery rotation и sanitized forbidden flow; backend CI получил PostgreSQL service | Typecheck; 26/26 runnable tests pass + PostgreSQL test locally skipped; production build; diff/key scans clean | Push draft PR; GitHub CI must execute PostgreSQL persistence test and container smoke; Antigravity reviews contract/security for IOS-05 |
 | 2026-07-14 13:18 +05:00 | Antigravity | IOS-05 start | Reserved IOS-05 branch and updated ledger | Ledger updated | Dispatched worker for implementation |
+| 2026-07-14 13:10 +05:00 | Codex | BE-03 start / IOS-05 parallel handoff | Создан отдельный worktree `codex/be-03-installation-auth` от merge PR #7; зарезервированы persistent installation auth и параллельный iOS Keychain consumer | `origin/main` = `3823124`; worktrees physically isolated | Codex implements PostgreSQL registration/token rotation; Antigravity starts IOS-05 without changing backend/contracts |
 | 2026-07-14 13:02 +05:00 | Codex | IOS-04 macOS acceptance | Legacy PR3 test updated for mandatory idempotency key; IOS-04 app and isolated test target compiled and passed on GitHub-hosted Mac | Exact head `a7b01b0`; Actions run `29316445018` success: XcodeGen, build, XCTest | Publish acceptance record; require final exact-head green check; merge PR #7; keep H-006 stage/physical E2E open |
 | 2026-07-14 12:53 +05:00 | Codex | IOS-04 integration review | IOS-04 merged with current `main`; fixed compile-breaking state/event/configuration mismatches, OpenAPI config headers/error mapping, hardcoded token, real-WebRTC unit test, UI stale states and mock transcript generator | Conflict histories preserved; `git diff --check` clean; no Windows Swift toolchain | Push reviewed branch; open draft PR; require macOS build/XCTest before merge; keep stage/physical E2E open |
 | 2026-07-14 12:45 +05:00 | Antigravity | IOS-04 complete & Handoff | Реализован `LiveBackendClient`, оркестратор в `TranslationSessionStore`, состояния приложения и `Idempotency-Key`. Добавлены юнит-тесты `SessionOrchestratorTests` | Тесты оркестратора; компилируется | Codex review draft PR IOS-04; развертывание BE-02 на Stage для E2E |
@@ -273,7 +284,7 @@ Antigravity владеет реализацией. Изменение семан
 | B-002 | Не созданы отдельные worktree/clone для моделей | Codex | 2026-07-14 | Исключение перезаписи незакоммиченных файлов | RESOLVED |
 | B-003 | Установить portable GitHub CLI и авторизовать `YergZakon` | Codex | 2026-07-14 | Аутентифицированная публикация и дальнейшие PR | RESOLVED |
 | Q-001 | Fastify или NestJS? | Codex, review Antigravity | Day 1 | Backend skeleton/OpenAPI tooling | RESOLVED — Fastify accepted in D-004 |
-| Q-002 | Maintained native WebRTC package и минимальная iOS version | Antigravity | Day 1–2 | Physical-device spike | OPEN |
+| Q-002 | Maintained native WebRTC package и минимальная iOS version | Claude Code | До physical-device acceptance | Physical-device spike | OPEN |
 | Q-003 | Актуальные OpenAI translation endpoints/events/TTL | Codex + Antigravity | До BE-02/IOS-03 | Secret broker и event decoder | RESOLVED — translation client_secrets/calls и events verified; expiry берётся из provider `expires_at` |
 | B-004 | PR #3 конфликтует с `main` после merge BE-01; открыты contract/security findings PR #3/#4 | Antigravity | До iOS merge/E2E | Интеграцию iOS и physical iPhone test | RESOLVED — histories preserved, review findings closed, PR #3 merged, PR #4 retargeted to `main` |
 

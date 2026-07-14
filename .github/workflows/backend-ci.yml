@@ -35,6 +35,23 @@ jobs:
     name: Typecheck, test, build, and container smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TEST_DATABASE_URL: postgres://translator:translator-ci-password@127.0.0.1:5432/translator_test
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: translator
+          POSTGRES_PASSWORD: translator-ci-password
+          POSTGRES_DB: translator_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U translator -d translator_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out source
@@ -80,7 +97,7 @@ jobs:
         run: |
           test "$(docker inspect --format '{{.Config.User}}' translator-backend:ci)" = "node"
           if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' translator-backend:ci \
-            | grep -Eq '^(APP_TOKENS|SAFETY_IDENTIFIER_SECRET|OPENAI_API_KEY)='; then
+            | grep -Eq '^(DATABASE_URL|SAFETY_IDENTIFIER_SECRET|OPENAI_API_KEY)='; then
             echo "Runtime secret name was baked into the image environment" >&2
             exit 1
           fi
@@ -88,11 +105,11 @@ jobs:
       - name: Start container
         run: >-
           docker run --detach --name translator-backend-ci
-          --publish 127.0.0.1:3000:3000
+          --network host
           --env HOST=0.0.0.0
           --env PORT=3000
           --env LOG_LEVEL=warn
-          --env APP_TOKENS=ci-prototype-app-token
+          --env DATABASE_URL=postgres://translator:translator-ci-password@127.0.0.1:5432/translator_test
           --env SAFETY_IDENTIFIER_SECRET=ci-safety-identifier-secret-32-characters
           --env OPENAI_API_KEY=ci-placeholder-not-a-real-key
           translator-backend:ci
