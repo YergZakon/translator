@@ -14,10 +14,18 @@ import {
   createSessionRequestSchema,
   errorEnvelopeSchema,
   healthResponseSchema,
+  registerInstallationHeadersSchema,
+  registerInstallationRequestSchema,
+  registerInstallationResponseSchema,
   translationSessionSchema
 } from './http/schemas.js';
-import { StaticTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
+import { RepositoryTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
 import { ConfigService } from './services/config-service.js';
+import {
+  InstallationService,
+  InstallationServiceError,
+  type InstallationRepository
+} from './services/installation-service.js';
 import {
   SecretBrokerError,
   type SecretBroker,
@@ -28,6 +36,17 @@ import {
   SessionService,
   SessionServiceError
 } from './services/session-service.js';
+import { InMemoryInstallationRepository } from './storage/in-memory-installation-repository.js';
+
+interface RegisterInstallationHeaders {
+  'x-app-attestation'?: string;
+}
+
+interface RegisterInstallationRequest {
+  installationPublicId: string;
+  app: { version: string; build: number };
+  device: { osVersion: string; modelClass: 'phone' };
+}
 
 interface ConfigHeaders {
   authorization?: string;
@@ -46,6 +65,10 @@ export interface BuildAppOptions {
   now?: () => Date;
   isReady?: () => boolean;
   tokenVerifier?: TokenVerifier;
+  installationRepository?: InstallationRepository;
+  safetyIdentifierSecret?: string;
+  installationIdFactory?: () => string;
+  appTokenFactory?: () => string;
   appConfig?: AppConfig;
   secretBroker?: SecretBroker;
   translationCallsUrl?: string;
@@ -80,9 +103,23 @@ function sendError(
 export function buildApp(options: BuildAppOptions = {}) {
   const now = options.now ?? (() => new Date());
   const isReady = options.isReady ?? (() => true);
+  const installationRepository =
+    options.installationRepository ?? new InMemoryInstallationRepository();
+  const installationService = new InstallationService({
+    repository: installationRepository,
+    now,
+    ...(options.installationIdFactory === undefined
+      ? {}
+      : { installationIdFactory: options.installationIdFactory }),
+    ...(options.appTokenFactory === undefined ? {} : { tokenFactory: options.appTokenFactory })
+  });
   const tokenVerifier =
     options.tokenVerifier ??
-    new StaticTokenVerifier([], 'build-app-default-safety-secret-32chars');
+    new RepositoryTokenVerifier(
+      installationRepository,
+      options.safetyIdentifierSecret ?? 'build-app-default-safety-secret-32chars',
+      now
+    );
   const configService = new ConfigService(options.appConfig ?? defaultAppConfig);
   const sessionService = new SessionService({
     broker: options.secretBroker ?? new UnavailableSecretBroker(),
@@ -135,6 +172,51 @@ export function buildApp(options: BuildAppOptions = {}) {
     }
   );
 
+  app.post<{ Headers: RegisterInstallationHeaders; Body: RegisterInstallationRequest }>(
+    '/v1/installations',
+    {
+      schema: {
+        headers: registerInstallationHeadersSchema,
+        body: registerInstallationRequestSchema,
+        response: {
+          200: registerInstallationResponseSchema,
+          201: registerInstallationResponseSchema,
+          400: errorEnvelopeSchema,
+          403: errorEnvelopeSchema,
+          429: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const registration = await installationService.register({
+          installationPublicId: request.body.installationPublicId,
+          appVersion: request.body.app.version,
+          appBuild: request.body.app.build,
+          osVersion: request.body.device.osVersion,
+          modelClass: request.body.device.modelClass
+        });
+        return reply.code(registration.statusCode).send({
+          installationId: registration.installationId,
+          tokenType: registration.tokenType,
+          appToken: registration.appToken,
+          expiresAt: registration.expiresAt
+        });
+      } catch (error) {
+        if (error instanceof InstallationServiceError) {
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            error.safeMessage
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
   app.get<{ Headers: ConfigHeaders }>(
     '/v1/config',
     {
@@ -147,7 +229,10 @@ export function buildApp(options: BuildAppOptions = {}) {
         }
       },
       preHandler: async (request, reply) => {
-        if (tokenVerifier.authenticateAuthorizationHeader(request.headers.authorization) === null) {
+        if (
+          (await tokenVerifier.authenticateAuthorizationHeader(request.headers.authorization)) ===
+          null
+        ) {
           return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
         }
       }
@@ -192,7 +277,9 @@ export function buildApp(options: BuildAppOptions = {}) {
       }
     },
     async (request, reply) => {
-      const identity = tokenVerifier.authenticateAuthorizationHeader(request.headers.authorization);
+      const identity = await tokenVerifier.authenticateAuthorizationHeader(
+        request.headers.authorization
+      );
       if (identity === null) {
         return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
       }

@@ -10,15 +10,17 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "test": "tsx --test test/app.test.ts test/openai-secret-broker.test.ts test/session.test.ts",
+    "test": "tsx --test test/app.test.ts test/installation-service.test.ts test/postgres-installation-repository.test.ts test/runtime-config.test.ts test/openai-secret-broker.test.ts test/session.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
-    "fastify": "^5.10.0"
+    "fastify": "^5.10.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "@types/pg": "^8.15.5",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2"
   }

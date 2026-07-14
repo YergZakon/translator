@@ -59,6 +59,44 @@ export const healthResponseSchema = Type.Object(
   { additionalProperties: false }
 );
 
+export const registerInstallationHeadersSchema = Type.Object(
+  {
+    'x-app-attestation': Type.Optional(Type.String({ maxLength: 8192 }))
+  },
+  { additionalProperties: true }
+);
+
+export const registerInstallationRequestSchema = Type.Object(
+  {
+    installationPublicId: Type.String({ format: 'uuid' }),
+    app: Type.Object(
+      {
+        version: Type.String({ maxLength: 32 }),
+        build: Type.Integer({ minimum: 1 })
+      },
+      { additionalProperties: false }
+    ),
+    device: Type.Object(
+      {
+        osVersion: Type.String({ maxLength: 32 }),
+        modelClass: Type.Literal('phone')
+      },
+      { additionalProperties: false }
+    )
+  },
+  { additionalProperties: false }
+);
+
+export const registerInstallationResponseSchema = Type.Object(
+  {
+    installationId: Type.String({ pattern: '^ins_[A-Za-z0-9]{20,40}$' }),
+    tokenType: Type.Literal('Bearer'),
+    appToken: Type.String({ minLength: 24, maxLength: 2048 }),
+    expiresAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()])
+  },
+  { additionalProperties: false }
+);
+
 export const errorEnvelopeSchema = Type.Object(
   {
     error: Type.Object(
