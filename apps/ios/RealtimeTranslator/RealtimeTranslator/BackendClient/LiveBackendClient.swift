@@ -1,12 +1,31 @@
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
+
+private actor TokenRefreshCoordinator {
+    private var task: Task<String, Error>?
+
+    func refresh(using operation: @escaping () async throws -> String) async throws -> String {
+        if let task {
+            return try await task.value
+        }
+
+        let newTask = Task { try await operation() }
+        task = newTask
+        do {
+            let token = try await newTask.value
+            task = nil
+            return token
+        } catch {
+            task = nil
+            throw error
+        }
+    }
+}
 
 final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
     private let baseURL: URL
     private let session: URLSession
     private let tokenStorage: TokenStorage
+    private let refreshCoordinator = TokenRefreshCoordinator()
 
     init(baseURL: URL, tokenStorage: TokenStorage, session: URLSession = .shared) {
         self.baseURL = baseURL
@@ -22,7 +41,7 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
     func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse {
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/config"))
         request.httpMethod = "GET"
-        authorize(&request)
+        try authorize(&request)
         request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
         request.setValue(String(appBuild), forHTTPHeaderField: "X-App-Build")
         if let etag = etag {
@@ -53,7 +72,7 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
-        authorize(&urlRequest)
+        try authorize(&urlRequest)
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
 
@@ -92,8 +111,8 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
         return try JSONDecoder().decode(RegisterInstallationResponse.self, from: data)
     }
 
-    private func authorize(_ request: inout URLRequest) {
-        if let token = tokenStorage.getAppToken(), !token.isEmpty {
+    private func authorize(_ request: inout URLRequest) throws {
+        if let token = try tokenStorage.getAppToken(), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
@@ -108,10 +127,8 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
 
         if httpResponse.statusCode == 401 && allowRetry {
             if isInvalidAppTokenError(data: data) {
-                let regResponse = try await triggerReRegistration()
-                try tokenStorage.saveAppToken(regResponse.appToken)
-
-                currentRequest.setValue("Bearer \(regResponse.appToken)", forHTTPHeaderField: "Authorization")
+                let token = try await replacementToken(for: currentRequest)
+                currentRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
                 return try await perform(currentRequest, allowRetry: false)
             }
@@ -135,9 +152,27 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
         return envelope.error.code == .INVALID_APP_TOKEN
     }
 
+    private func replacementToken(for failedRequest: URLRequest) async throws -> String {
+        if
+            let currentToken = try tokenStorage.getAppToken(),
+            !currentToken.isEmpty,
+            failedRequest.value(forHTTPHeaderField: "Authorization") != "Bearer \(currentToken)"
+        {
+            return currentToken
+        }
+
+        return try await refreshCoordinator.refresh { [self] in
+            let registration = try await triggerReRegistration()
+            try tokenStorage.saveAppToken(registration.appToken)
+            return registration.appToken
+        }
+    }
+
     private func triggerReRegistration() async throws -> RegisterInstallationResponse {
-        var publicId = tokenStorage.getInstallationPublicId()
-        if publicId == nil {
+        let publicId: UUID
+        if let storedId = try tokenStorage.getInstallationPublicId() {
+            publicId = storedId
+        } else {
             let newId = UUID()
             try tokenStorage.saveInstallationPublicId(newId)
             publicId = newId
@@ -147,7 +182,7 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
         let deviceInfo = getDeviceInfo()
 
         let req = RegisterInstallationRequest(
-            installationPublicId: publicId!,
+            installationPublicId: publicId,
             app: appInfo,
             device: deviceInfo
         )
@@ -163,18 +198,11 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
     }
 
     private func getDeviceInfo() -> DeviceInfo {
-        #if canImport(UIKit)
-        return DeviceInfo(
-            osVersion: UIDevice.current.systemVersion,
-            modelClass: UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone"
-        )
-        #else
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return DeviceInfo(
             osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
             modelClass: "phone"
         )
-        #endif
     }
 
     private func decodeServerError(data: Data, statusCode: Int) -> BackendError {

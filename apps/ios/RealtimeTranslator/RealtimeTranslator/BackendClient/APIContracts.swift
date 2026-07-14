@@ -11,17 +11,27 @@ struct DeviceInfo: Codable {
     let modelClass: String
 }
 
-struct RegisterInstallationRequest: Codable {
+struct RegisterInstallationRequest: Encodable {
     let installationPublicId: UUID
     let app: AppInfo
     let device: DeviceInfo
 }
 
-struct RegisterInstallationResponse: Codable {
+enum TokenType: String, Decodable {
+    case bearer = "Bearer"
+}
+
+struct RegisterInstallationResponse: Decodable, CustomStringConvertible, CustomDebugStringConvertible {
     let installationId: String
-    let tokenType: String // Must be "Bearer"
+    let tokenType: TokenType
     let appToken: String
-    let expiresAt: String? // date-time
+    let expiresAt: String?
+
+    var description: String {
+        "RegisterInstallationResponse(installationId: \(installationId), tokenType: \(tokenType.rawValue), appToken: ***, expiresAt: \(expiresAt ?? "nil"))"
+    }
+
+    var debugDescription: String { description }
 }
 
 // MARK: - AppConfig

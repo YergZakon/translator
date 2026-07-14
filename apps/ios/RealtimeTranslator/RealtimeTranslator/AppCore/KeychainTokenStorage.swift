@@ -1,58 +1,42 @@
 import Foundation
 import Security
 
-protocol TokenStorage {
-    func getAppToken() -> String?
+protocol TokenStorage: AnyObject {
+    func getAppToken() throws -> String?
     func saveAppToken(_ token: String) throws
-    func getInstallationPublicId() -> UUID?
+    func getInstallationPublicId() throws -> UUID?
     func saveInstallationPublicId(_ id: UUID) throws
     func deleteToken() throws
 }
 
-enum KeychainError: Error, LocalizedError {
+enum KeychainError: Error, LocalizedError, Equatable {
     case invalidData
     case secError(OSStatus)
 
     var errorDescription: String? {
         switch self {
         case .invalidData:
-            return "Failed to convert data to/from UTF-8 string."
+            return "Keychain data is invalid."
         case .secError(let status):
-            return "Keychain error: \(status)"
+            return "Keychain operation failed (\(status))."
         }
     }
 }
 
-class KeychainTokenStorage: TokenStorage {
-    private let service = "com.realtimetranslator.keychain"
-    private let tokenAccount = "appToken"
-    private let installationAccount = "installationPublicId"
+protocol SecureStringStore {
+    func read(account: String) throws -> String?
+    func upsert(_ value: String, account: String) throws
+    func delete(account: String) throws
+}
 
-    private func saveString(_ string: String, forAccount account: String) throws {
-        guard let data = string.data(using: .utf8) else {
-            throw KeychainError.invalidData
-        }
+final class SecurityKeychainStore: SecureStringStore {
+    private let service: String
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-
-        // Try deleting the item first (in case it already exists)
-        SecItemDelete(query as CFDictionary)
-
-        var attributes = query
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        if status != errSecSuccess {
-            throw KeychainError.secError(status)
-        }
+    init(service: String) {
+        self.service = service
     }
 
-    private func getString(forAccount account: String) -> String? {
+    func read(account: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -60,81 +44,134 @@ class KeychainTokenStorage: TokenStorage {
             kSecReturnData as String: kCFBooleanTrue as Any,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-
-        var dataTypeRef: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
-
-        guard status == errSecSuccess, let data = dataTypeRef as? Data else {
-            return nil
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw KeychainError.secError(status) }
+        guard
+            let data = result as? Data,
+            let value = String(data: data, encoding: .utf8)
+        else {
+            throw KeychainError.invalidData
         }
-
-        return String(data: data, encoding: .utf8)
+        return value
     }
 
-    private func delete(account: String) throws {
+    func upsert(_ value: String, account: String) throws {
+        guard let data = value.data(using: .utf8) else {
+            throw KeychainError.invalidData
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+        let values: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, values as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw KeychainError.secError(updateStatus)
+        }
 
+        var attributes = query
+        values.forEach { attributes[$0.key] = $0.value }
+        let addStatus = SecItemAdd(attributes as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.secError(addStatus)
+        }
+    }
+
+    func delete(account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
         let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.secError(status)
         }
     }
+}
 
-    func getAppToken() -> String? {
-        return getString(forAccount: tokenAccount)
+final class KeychainTokenStorage: TokenStorage {
+    private let store: SecureStringStore
+    private let tokenAccount = "appToken"
+    private let installationAccount = "installationPublicId"
+
+    init(store: SecureStringStore = SecurityKeychainStore(
+        service: "com.yergakon.RealtimeTranslator.installationAuth"
+    )) {
+        self.store = store
+    }
+
+    func getAppToken() throws -> String? {
+        try store.read(account: tokenAccount)
     }
 
     func saveAppToken(_ token: String) throws {
-        try saveString(token, forAccount: tokenAccount)
+        try store.upsert(token, account: tokenAccount)
     }
 
-    func getInstallationPublicId() -> UUID? {
-        guard let string = getString(forAccount: installationAccount) else {
+    func getInstallationPublicId() throws -> UUID? {
+        guard let value = try store.read(account: installationAccount) else {
             return nil
         }
-        return UUID(uuidString: string)
+        guard let id = UUID(uuidString: value) else {
+            throw KeychainError.invalidData
+        }
+        return id
     }
 
     func saveInstallationPublicId(_ id: UUID) throws {
-        try saveString(id.uuidString, forAccount: installationAccount)
+        try store.upsert(id.uuidString, account: installationAccount)
     }
 
     func deleteToken() throws {
-        try delete(account: tokenAccount)
+        try store.delete(account: tokenAccount)
     }
 }
 
-class MemoryTokenStorage: TokenStorage {
+final class MemoryTokenStorage: TokenStorage {
+    private let lock = NSLock()
     private var token: String?
     private var installationId: UUID?
 
     init(appToken: String? = nil, installationId: UUID? = nil) {
-        self.token = appToken
+        token = appToken
         self.installationId = installationId
     }
 
-    func getAppToken() -> String? {
+    func getAppToken() throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
         return token
     }
 
     func saveAppToken(_ token: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
         self.token = token
     }
 
-    func getInstallationPublicId() -> UUID? {
+    func getInstallationPublicId() throws -> UUID? {
+        lock.lock()
+        defer { lock.unlock() }
         return installationId
     }
 
     func saveInstallationPublicId(_ id: UUID) throws {
-        self.installationId = id
+        lock.lock()
+        defer { lock.unlock() }
+        installationId = id
     }
 
     func deleteToken() throws {
+        lock.lock()
+        defer { lock.unlock() }
         token = nil
     }
 }
-

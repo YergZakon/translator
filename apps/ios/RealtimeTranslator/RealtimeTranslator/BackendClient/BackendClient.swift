@@ -111,10 +111,10 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI, InstallationAPI {
     func registerInstallation(request: RegisterInstallationRequest) async throws -> RegisterInstallationResponse {
         try await Task.sleep(nanoseconds: 500_000_000)
         return RegisterInstallationResponse(
-            installationId: "inst_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
-            tokenType: "Bearer",
+            installationId: "ins_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            tokenType: .bearer,
             appToken: "mock_app_token_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
-            expiresAt: "2026-07-15T13:18:00Z"
+            expiresAt: nil
         )
     }
 }
