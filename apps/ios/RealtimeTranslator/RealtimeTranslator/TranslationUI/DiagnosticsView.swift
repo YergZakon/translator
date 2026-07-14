@@ -3,8 +3,6 @@ import SwiftUI
 struct DiagnosticsView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.presentationMode) var presentationMode
-    @AppStorage("easyTalkHapticsEnabled") private var hapticsEnabled = true
-    @AppStorage("easyTalkAutoplayEnabled") private var autoplayEnabled = true
 
     private let strings = EasyTalkStrings.current
 
@@ -38,7 +36,7 @@ struct DiagnosticsView: View {
                     aboutCard
 
                     Text("EasyTalk · SwiftUI · WebRTC · OpenAI Realtime")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.easyTalk(11, .medium))
                         .foregroundColor(EasyTalk.fg3)
                         .padding(.top, 22)
                 }
@@ -59,7 +57,7 @@ struct DiagnosticsView: View {
             }
             .accessibilityLabel("Back")
             Text(strings.setTitle)
-                .font(.system(size: 24, weight: .bold))
+                .font(.easyTalk(24, .bold))
                 .foregroundColor(EasyTalk.fg)
             Spacer()
         }
@@ -69,13 +67,13 @@ struct DiagnosticsView: View {
         VStack(spacing: 0) {
             row(strings.connection) {
                 Text(container.environment.rawValue.uppercased())
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.easyTalk(13, .semibold))
                     .foregroundColor(EasyTalk.accent)
             }
             divider
             row("Endpoint") {
                 Text(container.environment.baseURL.absoluteString)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(.easyTalk(11, .medium, design: .monospaced))
                     .foregroundColor(EasyTalk.fg2)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -83,18 +81,20 @@ struct DiagnosticsView: View {
             divider
             row(strings.model) {
                 Text("gpt-realtime")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.easyTalk(13, .semibold))
                     .foregroundColor(EasyTalk.fg2)
             }
         }
         .easyTalkCard()
     }
 
+    // Haptics/autoplay behavior is outside the UX-02 visual scope, so these
+    // preferences are announced but explicitly not offered as working toggles.
     private var preferencesCard: some View {
         VStack(spacing: 0) {
-            toggleRow(strings.haptics, isOn: $hapticsEnabled)
+            plannedPreferenceRow(strings.haptics)
             divider
-            toggleRow(strings.autoplay, isOn: $autoplayEnabled)
+            plannedPreferenceRow(strings.autoplay)
         }
         .easyTalkCard()
     }
@@ -103,12 +103,12 @@ struct DiagnosticsView: View {
         VStack(alignment: .leading, spacing: 8) {
             if container.diagnosticsStore.logs.isEmpty {
                 Text("—")
-                    .font(.system(size: 13))
+                    .font(.easyTalk(13))
                     .foregroundColor(EasyTalk.fg3)
             } else {
                 ForEach(container.diagnosticsStore.logs, id: \.self) { log in
                     Text(log)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.easyTalk(11, design: .monospaced))
                         .foregroundColor(EasyTalk.fg2)
                 }
             }
@@ -122,7 +122,7 @@ struct DiagnosticsView: View {
     private var aboutCard: some View {
         row(strings.version) {
             Text(appVersion)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.easyTalk(13, .semibold))
                 .foregroundColor(EasyTalk.fg2)
         }
         .easyTalkCard()
@@ -135,7 +135,7 @@ struct DiagnosticsView: View {
     private func row(_ title: String, @ViewBuilder trailing: () -> some View) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.easyTalk(14, .medium))
                 .foregroundColor(EasyTalk.fg)
             Spacer(minLength: 12)
             trailing()
@@ -144,20 +144,25 @@ struct DiagnosticsView: View {
         .padding(.horizontal, 16)
     }
 
-    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+    private func plannedPreferenceRow(_ title: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(EasyTalk.fg)
+                .font(.easyTalk(14, .medium))
+                .foregroundColor(EasyTalk.fg3)
             Spacer(minLength: 12)
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(EasyTalk.english)
+            Text(strings.comingSoon)
+                .font(.easyTalk(11, .semibold))
+                .foregroundColor(EasyTalk.fg3)
+                .padding(.vertical, 3)
+                .padding(.horizontal, 8)
+                .background(EasyTalk.card2)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(EasyTalk.stroke, lineWidth: 1))
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(title)
+        .accessibilityLabel("\(title): \(strings.comingSoon)")
     }
 
     private var appVersion: String {

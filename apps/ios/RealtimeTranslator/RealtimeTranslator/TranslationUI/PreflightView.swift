@@ -14,7 +14,7 @@ struct PreflightView: View {
     var body: some View {
         VStack(spacing: 0) {
             Text(strings.connecting)
-                .font(.system(size: 24, weight: .bold))
+                .font(.easyTalk(24, .bold))
                 .foregroundColor(EasyTalk.fg)
                 .padding(.top, 40)
 
@@ -48,7 +48,7 @@ struct PreflightView: View {
                     ProgressView()
                         .tint(EasyTalk.accent)
                     Text(strings.connectingSub)
-                        .font(.system(size: 12))
+                        .font(.easyTalk(12))
                         .foregroundColor(EasyTalk.fg2)
                 }
                 .padding(.bottom, 40)
@@ -75,10 +75,10 @@ struct PreflightView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.easyTalk(14, .medium))
                     .foregroundColor(EasyTalk.fg)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.easyTalk(12))
                     .foregroundColor(EasyTalk.fg2)
             }
             Spacer()

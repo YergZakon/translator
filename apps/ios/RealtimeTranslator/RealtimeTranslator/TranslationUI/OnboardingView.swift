@@ -59,17 +59,17 @@ struct OnboardingView: View {
             .accessibilityHidden(true)
 
             Text("EasyTalk")
-                .font(.system(size: 27, weight: .bold))
+                .font(.easyTalk(27, .bold))
                 .foregroundColor(EasyTalk.fg)
                 .padding(.top, 18)
 
             Text(strings.onbTitle)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.easyTalk(17, .semibold))
                 .foregroundColor(EasyTalk.fg)
                 .padding(.top, 12)
 
             Text(strings.onbSub)
-                .font(.system(size: 14))
+                .font(.easyTalk(14))
                 .foregroundColor(EasyTalk.fg2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 270)
@@ -99,10 +99,10 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.easyTalk(14, .semibold))
                     .foregroundColor(EasyTalk.fg)
                 Text(subtitle)
-                    .font(.system(size: 12.5))
+                    .font(.easyTalk(12.5))
                     .foregroundColor(EasyTalk.fg2)
             }
             Spacer(minLength: 0)
@@ -127,10 +127,10 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
                         Text(strings.micPerm)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.easyTalk(14, .semibold))
                             .foregroundColor(EasyTalk.fg)
                         Text(strings.critical)
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.easyTalk(9, .bold))
                             .foregroundColor(EasyTalk.danger)
                             .padding(.vertical, 2)
                             .padding(.horizontal, 6)
@@ -138,7 +138,7 @@ struct OnboardingView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                     Text(strings.micPermSub)
-                        .font(.system(size: 12))
+                        .font(.easyTalk(12))
                         .foregroundColor(EasyTalk.fg2)
                 }
                 Spacer(minLength: 8)
@@ -162,10 +162,10 @@ struct OnboardingView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(strings.speechPerm)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.easyTalk(14, .semibold))
                         .foregroundColor(EasyTalk.fg)
                     Text(strings.speechPermSub)
-                        .font(.system(size: 12))
+                        .font(.easyTalk(12))
                         .foregroundColor(EasyTalk.fg2)
                 }
                 Spacer(minLength: 8)
@@ -187,7 +187,7 @@ struct OnboardingView: View {
                         .font(.system(size: 13, weight: .bold))
                 } else {
                     Text("OK")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.easyTalk(12, .bold))
                 }
             }
             .foregroundColor(state == .granted ? EasyTalk.english : EasyTalk.fg)
@@ -204,7 +204,7 @@ struct OnboardingView: View {
                 .foregroundColor(EasyTalk.danger)
                 .padding(.top, 1)
             Text(strings.micError)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.easyTalk(12.5, .medium))
                 .foregroundColor(EasyTalk.fg)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

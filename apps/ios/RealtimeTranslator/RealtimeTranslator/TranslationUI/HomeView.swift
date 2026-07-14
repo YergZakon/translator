@@ -15,26 +15,33 @@ struct HomeView: View {
             ZStack {
                 EasyTalkBackground()
 
-                VStack(spacing: 0) {
-                    header
-                        .padding(.top, 6)
+                // Scrollable so large Dynamic Type sizes never clip; at
+                // regular sizes minHeight keeps the start button pinned low.
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            header
+                                .padding(.top, 6)
 
-                    EasyTalkSectionLabel(strings.modeTitle)
-                        .padding(.top, 24)
-                        .padding(.bottom, 10)
-                    modeCards
+                            EasyTalkSectionLabel(strings.modeTitle)
+                                .padding(.top, 24)
+                                .padding(.bottom, 10)
+                            modeCards
 
-                    EasyTalkSectionLabel(strings.langTitle)
-                        .padding(.top, 24)
-                        .padding(.bottom, 10)
-                    languagesCard
+                            EasyTalkSectionLabel(strings.langTitle)
+                                .padding(.top, 24)
+                                .padding(.bottom, 10)
+                            languagesCard
 
-                    Spacer(minLength: 16)
+                            Spacer(minLength: 16)
 
-                    startButton
+                            startButton
+                        }
+                        .padding(.horizontal, 26)
+                        .padding(.bottom, 26)
+                        .frame(minHeight: proxy.size.height)
+                    }
                 }
-                .padding(.horizontal, 26)
-                .padding(.bottom, 26)
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showDiagnostics) {
@@ -48,10 +55,10 @@ struct HomeView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(strings.hello)
-                    .font(.system(size: 14))
+                    .font(.easyTalk(14))
                     .foregroundColor(EasyTalk.fg2)
                 Text(strings.homeTitle)
-                    .font(.system(size: 26, weight: .bold))
+                    .font(.easyTalk(26, .bold))
                     .foregroundColor(EasyTalk.fg)
             }
             Spacer()
@@ -98,10 +105,10 @@ struct HomeView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.easyTalk(16, .semibold))
                         .foregroundColor(EasyTalk.fg)
                     Text(subtitle)
-                        .font(.system(size: 12.5))
+                        .font(.easyTalk(12.5))
                         .foregroundColor(EasyTalk.fg2)
                 }
                 Spacer(minLength: 8)
@@ -137,10 +144,10 @@ struct HomeView: View {
         HStack(spacing: 11) {
             VStack(spacing: 2) {
                 Text("RU")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.easyTalk(22, .bold))
                     .foregroundColor(EasyTalk.russian)
                 Text("Русский")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.easyTalk(12, .medium))
                     .foregroundColor(EasyTalk.fg2)
             }
             .frame(maxWidth: .infinity)
@@ -159,10 +166,10 @@ struct HomeView: View {
 
             VStack(spacing: 2) {
                 Text("EN")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.easyTalk(22, .bold))
                     .foregroundColor(EasyTalk.english)
                 Text("English")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.easyTalk(12, .medium))
                     .foregroundColor(EasyTalk.fg2)
             }
             .frame(maxWidth: .infinity)
@@ -179,7 +186,7 @@ struct HomeView: View {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 17, weight: .semibold))
                 Text(strings.startBtn)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.easyTalk(17, .bold))
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)

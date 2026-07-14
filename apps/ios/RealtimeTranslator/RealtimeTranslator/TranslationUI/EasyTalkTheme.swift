@@ -87,6 +87,35 @@ extension Color {
     }
 }
 
+// MARK: - Scalable typography
+
+extension Font {
+    // Dynamic Type mapping for the design's pixel sizes: each size resolves
+    // to the nearest semantic text style so user font settings keep working.
+    static func easyTalkTextStyle(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case ..<11.5: return .caption2
+        case ..<13: return .caption
+        case ..<14.5: return .footnote
+        case ..<15.5: return .subheadline
+        case ..<16.5: return .callout
+        case ..<18: return .body
+        case ..<21: return .title3
+        case ..<23: return .title2
+        case ..<27.5: return .title
+        default: return .largeTitle
+        }
+    }
+
+    static func easyTalk(
+        _ size: CGFloat,
+        _ weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Font {
+        Font.system(easyTalkTextStyle(for: size), design: design).weight(weight)
+    }
+}
+
 // MARK: - Background
 
 struct EasyTalkBackground: View {
@@ -139,7 +168,7 @@ struct EasyTalkSectionLabel: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 11, weight: .bold))
+            .font(.easyTalk(11, .bold))
             .tracking(0.7)
             .foregroundColor(EasyTalk.fg3)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,7 +181,7 @@ struct EasyTalkPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .bold))
+            .font(.easyTalk(16, .bold))
             .foregroundColor(isEnabled ? .white : EasyTalk.fg3)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
@@ -221,6 +250,7 @@ struct EasyTalkStrings {
     let preferences: String
     let haptics: String
     let autoplay: String
+    let comingSoon: String
     let about: String
     let version: String
 
@@ -268,6 +298,7 @@ struct EasyTalkStrings {
         preferences: "Параметры",
         haptics: "Тактильный отклик",
         autoplay: "Автоозвучка перевода",
+        comingSoon: "Скоро",
         about: "О приложении",
         version: "Версия"
     )
@@ -316,6 +347,7 @@ struct EasyTalkStrings {
         preferences: "Preferences",
         haptics: "Haptic feedback",
         autoplay: "Auto-play translation",
+        comingSoon: "Coming soon",
         about: "About",
         version: "Version"
     )

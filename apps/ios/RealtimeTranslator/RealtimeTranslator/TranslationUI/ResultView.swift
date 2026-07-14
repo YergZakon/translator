@@ -57,7 +57,7 @@ struct ResultView: View {
     private var header: some View {
         HStack {
             Text(strings.resultTitle)
-                .font(.system(size: 24, weight: .bold))
+                .font(.easyTalk(24, .bold))
                 .foregroundColor(EasyTalk.fg)
             Spacer()
             Button(action: dismiss) {
@@ -82,10 +82,10 @@ struct ResultView: View {
     private func statCard(value: String, label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(size: 20, weight: .bold))
+                .font(.easyTalk(20, .bold))
                 .foregroundColor(EasyTalk.fg)
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .font(.easyTalk(11, .medium))
                 .foregroundColor(EasyTalk.fg2)
         }
         .frame(maxWidth: .infinity)
@@ -99,7 +99,7 @@ struct ResultView: View {
         VStack(spacing: 8) {
             if segments.isEmpty {
                 Text("—")
-                    .font(.system(size: 14))
+                    .font(.easyTalk(14))
                     .foregroundColor(EasyTalk.fg3)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -117,7 +117,7 @@ struct ResultView: View {
         let sideColor = EasyTalk.side(segment.side)
         return HStack(alignment: .top, spacing: 10) {
             Text(isRussian ? "RU" : "EN")
-                .font(.system(size: 10, weight: .heavy))
+                .font(.easyTalk(10, .heavy))
                 .tracking(0.5)
                 .foregroundColor(sideColor)
                 .padding(.vertical, 3)
@@ -126,7 +126,7 @@ struct ResultView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .padding(.top, 1)
             Text(segment.text)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.easyTalk(14, .semibold))
                 .foregroundColor(EasyTalk.fg)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -142,7 +142,7 @@ struct ResultView: View {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 14, weight: .semibold))
                     Text(copied ? strings.copied : strings.copy)
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.easyTalk(13.5, .semibold))
                 }
                 .foregroundColor(EasyTalk.fg)
                 .frame(maxWidth: .infinity)
@@ -161,7 +161,7 @@ struct ResultView: View {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 14, weight: .semibold))
                     Text(strings.share)
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.easyTalk(13.5, .semibold))
                 }
                 .foregroundColor(EasyTalk.fg)
                 .frame(maxWidth: .infinity)
@@ -180,7 +180,7 @@ struct ResultView: View {
     private var ratingCard: some View {
         VStack(spacing: 0) {
             Text(strings.rate)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.easyTalk(15, .semibold))
                 .foregroundColor(EasyTalk.fg)
 
             HStack(spacing: 8) {
@@ -211,7 +211,7 @@ struct ResultView: View {
         let isSelected = selectedTags.contains(key)
         return Button(action: { toggleTag(key) }) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.easyTalk(12, .semibold))
                 .foregroundColor(isSelected ? .white : EasyTalk.fg2)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 13)

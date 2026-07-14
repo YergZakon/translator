@@ -1,5 +1,13 @@
 import SwiftUI
 
+// Which Live controls exist per translation mode. One-way has a single
+// RU→EN leg, so exposing a side switch would only fake speaker state.
+enum LiveControlsPolicy {
+    static func showsSideSwitch(for mode: TranslationMode) -> Bool {
+        mode == .dialogue
+    }
+}
+
 struct LiveView: View {
     @ObservedObject var sessionStore: TranslationSessionStore
     let mode: TranslationMode
@@ -57,7 +65,7 @@ struct LiveView: View {
                     .frame(width: 9, height: 9)
                     .shadow(color: statusColor, radius: 4)
                 Text(statusLabel)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.easyTalk(13, .semibold))
                     .foregroundColor(EasyTalk.fg)
             }
             .padding(.vertical, 7)
@@ -72,7 +80,7 @@ struct LiveView: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 12, weight: .bold))
                     Text(strings.degraded)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.easyTalk(12, .semibold))
                 }
                 .foregroundColor(EasyTalk.warning)
                 .padding(.vertical, 6)
@@ -135,10 +143,10 @@ struct LiveView: View {
             .accessibilityHidden(true)
 
             Text(strings.connecting)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.easyTalk(19, .semibold))
                 .foregroundColor(EasyTalk.fg)
             Text(strings.connectingSub)
-                .font(.system(size: 14))
+                .font(.easyTalk(14))
                 .foregroundColor(EasyTalk.fg2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 250)
@@ -167,10 +175,10 @@ struct LiveView: View {
             .accessibilityHidden(true)
 
             Text(strings.ready)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.easyTalk(20, .semibold))
                 .foregroundColor(EasyTalk.fg)
             Text(strings.readySub)
-                .font(.system(size: 14))
+                .font(.easyTalk(14))
                 .foregroundColor(EasyTalk.fg2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 250)
@@ -189,7 +197,7 @@ struct LiveView: View {
             .accessibilityHidden(true)
 
             Text(strings.listening)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.easyTalk(19, .semibold))
                 .foregroundColor(EasyTalk.fg)
         }
     }
@@ -202,7 +210,7 @@ struct LiveView: View {
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundColor(EasyTalk.danger)
                 Text(message)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.easyTalk(14, .medium))
                     .foregroundColor(EasyTalk.fg)
                     .multilineTextAlignment(.center)
             }
@@ -251,7 +259,7 @@ struct LiveView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
                     Text(isRussian ? "RU" : "EN")
-                        .font(.system(size: 10, weight: .heavy))
+                        .font(.easyTalk(10, .heavy))
                         .tracking(0.5)
                         .foregroundColor(sideColor)
                         .padding(.vertical, 3)
@@ -259,11 +267,11 @@ struct LiveView: View {
                         .background(sideColor.opacity(0.13))
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     Text(segment.side.displayName)
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.easyTalk(10.5, .medium))
                         .foregroundColor(EasyTalk.fg3)
                 }
                 Text(segment.text)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.easyTalk(16, .semibold))
                     .foregroundColor(EasyTalk.fg)
             }
             .padding(.vertical, 11)
@@ -295,19 +303,21 @@ struct LiveView: View {
     private var controlsBar: some View {
         HStack {
             Spacer()
-            controlColumn(label: strings.switchSpeaker) {
-                Button(action: switchSpeaker) {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 21, weight: .semibold))
-                        .foregroundColor(EasyTalk.fg)
-                        .frame(width: 54, height: 54)
-                        .background(EasyTalk.card2)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(EasyTalk.stroke, lineWidth: 1))
+            if LiveControlsPolicy.showsSideSwitch(for: mode) {
+                controlColumn(label: strings.switchSpeaker) {
+                    Button(action: switchSpeaker) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundColor(EasyTalk.fg)
+                            .frame(width: 54, height: 54)
+                            .background(EasyTalk.card2)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(EasyTalk.stroke, lineWidth: 1))
+                    }
+                    .accessibilityLabel(strings.switchSpeaker)
                 }
-                .accessibilityLabel(strings.switchSpeaker)
+                Spacer()
             }
-            Spacer()
             controlColumn(label: sessionStore.isMuted ? strings.unmute : strings.mute) {
                 Button(action: { sessionStore.setMute(!sessionStore.isMuted) }) {
                     Image(systemName: sessionStore.isMuted ? "mic.slash" : "mic.fill")
@@ -362,7 +372,7 @@ struct LiveView: View {
         VStack(spacing: 6) {
             button()
             Text(label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.easyTalk(10.5, .medium))
                 .foregroundColor(EasyTalk.fg2)
         }
     }
