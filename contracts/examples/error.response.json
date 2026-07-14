@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "UPSTREAM_SESSION_UNAVAILABLE",
+    "message": "Translation session is temporarily unavailable",
+    "retryable": true,
+    "retryAfterMs": 1500,
+    "traceId": "tr_01JEXAMPLE000000000000000"
+  }
+}
