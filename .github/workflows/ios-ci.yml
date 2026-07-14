@@ -17,7 +17,9 @@ concurrency:
 jobs:
   build-and-test:
     name: XcodeGen, build, and test
-    runs-on: macos-15
+    # The ARM macos-15 jobs observed here intermittently lost CoreSimulator.
+    # Keep Xcode 16.4 while using the explicitly supported Intel image.
+    runs-on: macos-15-intel
     timeout-minutes: 30
     defaults:
       run:
