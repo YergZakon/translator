@@ -81,8 +81,6 @@ jobs:
           fi
 
           echo "simulator_id=$simulator_id" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$simulator_id" || true
-          xcrun simctl bootstatus "$simulator_id" -b
 
       - name: Build app
         run: >-
@@ -99,6 +97,7 @@ jobs:
           -project RealtimeTranslator.xcodeproj
           -scheme RealtimeTranslatorTests
           -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -destination-timeout 120
           CODE_SIGNING_ALLOWED=NO
           -test-timeouts-enabled YES
           -default-test-execution-time-allowance 60
