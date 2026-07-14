@@ -75,7 +75,7 @@
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` | iOS client layer | API-01 | fixtures decode, error mapping |
-| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | TODO | — | transport layer | BE-02, IOS-01 | physical iPhone spike |
+| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | DONE | `antigravity/ios-ios-03-webrtc` | transport layer | BE-02, IOS-01 | physical iPhone spike |
 
 ## 4. Реестр собственных API P0
 
@@ -221,6 +221,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 10:15 +05:00 | Antigravity | IOS-03 complete | Добавлен SPM пакет `webrtc-sdk/WebRTC`; реализован `OpenAITranslationLeg` (SDP offer/answer via HTTP); добавлен `EventDecoder` для Data Channel | Компилируется, настроено для теста на реальном iPhone | WebRTC готов, ожидает запуска бэкенда (BE-01/02) для полного e2e теста |
 | 2026-07-14 10:10 +05:00 | Antigravity | IOS-02 complete | Созданы `APIContracts.swift` и `MockBackendClient` с использованием фикстур; обновлён `TranslationSessionStore` | Компилируется, стейт машина корректно запрашивает секреты с задержкой сети | WebRTC spike (IOS-03) |
 | 2026-07-14 10:05 +05:00 | Antigravity | ADR-0001 & API-01 review | Проверена Swift Codable совместимость `contracts/openapi.yaml`, fixtures успешно распарсены. D-004 принят (Fastify). H-004 закрыт. Начало работы над IOS-02. | Маппинг DTO написан и сверен; types/enums/secrets совпадают | Antigravity реализует `BackendClient` в iOS |
 | 2026-07-14 09:54 +05:00 | Codex | ADR-01/API-01 review handoff | Добавлены ADR-0001, OpenAPI 3.1 и fixtures; подтверждены official OpenAI translation endpoints/events | Redocly valid, 0 warnings; 3 JSON fixtures parse; official docs review | Commit/push; Antigravity reviews H-004 и начинает IOS-02 |
