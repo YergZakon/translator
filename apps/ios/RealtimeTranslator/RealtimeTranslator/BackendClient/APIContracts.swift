@@ -11,6 +11,19 @@ struct DeviceInfo: Codable {
     let modelClass: String
 }
 
+struct RegisterInstallationRequest: Codable {
+    let installationPublicId: UUID
+    let app: AppInfo
+    let device: DeviceInfo
+}
+
+struct RegisterInstallationResponse: Codable {
+    let installationId: String
+    let tokenType: String // Must be "Bearer"
+    let appToken: String
+    let expiresAt: String? // date-time
+}
+
 // MARK: - AppConfig
 struct ReconnectPolicy: Decodable {
     let maxAttempts: Int

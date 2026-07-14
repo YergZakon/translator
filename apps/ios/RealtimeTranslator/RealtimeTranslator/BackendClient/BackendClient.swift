@@ -14,6 +14,10 @@ protocol FeedbackAPI {
     // func submitFeedback(...) async throws -> FeedbackResponse
 }
 
+protocol InstallationAPI {
+    func registerInstallation(request: RegisterInstallationRequest) async throws -> RegisterInstallationResponse
+}
+
 // MARK: - Mock Implementation
 
 enum BackendError: Error {
@@ -21,7 +25,7 @@ enum BackendError: Error {
     case serverError(AppError)
 }
 
-class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
+class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI, InstallationAPI {
 
     private var lastETag = "etag_v1"
     var isTokenValid = true // Can be toggled for testing 401
@@ -102,5 +106,15 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
         )
 
         return response
+    }
+
+    func registerInstallation(request: RegisterInstallationRequest) async throws -> RegisterInstallationResponse {
+        try await Task.sleep(nanoseconds: 500_000_000)
+        return RegisterInstallationResponse(
+            installationId: "inst_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            tokenType: "Bearer",
+            appToken: "mock_app_token_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            expiresAt: "2026-07-15T13:18:00Z"
+        )
     }
 }

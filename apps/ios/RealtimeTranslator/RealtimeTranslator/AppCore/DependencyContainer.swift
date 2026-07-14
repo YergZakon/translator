@@ -11,11 +11,13 @@ class DependencyContainer: ObservableObject {
     let outputArbiter: OutputArbiter
     let telemetryClient: TelemetryClient
     let diagnosticsStore: DiagnosticsStore
+    let tokenStorage: TokenStorage
 
     init(
         environment: AppEnvironment = AppEnvironment.current,
         sessionAPI: SessionAPI? = nil,
-        configAPI: ConfigAPI? = nil
+        configAPI: ConfigAPI? = nil,
+        tokenStorage: TokenStorage? = nil
     ) {
         self.environment = environment
         self.featureFlags = FeatureFlags()
@@ -26,9 +28,21 @@ class DependencyContainer: ObservableObject {
         self.diagnosticsStore = diag
         self.telemetryClient = tele
 
+        let storage = tokenStorage ?? KeychainTokenStorage()
+        self.tokenStorage = storage
+
+        // Check if the stored token is nil or empty, and bootstrap it with environment.prototypeAppToken if it is present
+        let currentToken = storage.getAppToken()
+        if currentToken == nil || currentToken?.isEmpty == true {
+            let bootstrapToken = environment.prototypeAppToken
+            if !bootstrapToken.isEmpty {
+                try? storage.saveAppToken(bootstrapToken)
+            }
+        }
+
         let backendClient = LiveBackendClient(
             baseURL: environment.baseURL,
-            appToken: environment.prototypeAppToken
+            tokenStorage: storage
         )
         self.sessionAPI = sessionAPI ?? backendClient
         self.configAPI = configAPI ?? backendClient
