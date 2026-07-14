@@ -11,3 +11,10 @@ targets:
     settings:
       INFOPLIST_FILE: RealtimeTranslator/Info.plist
       PRODUCT_BUNDLE_IDENTIFIER: com.yergakon.RealtimeTranslator
+  RealtimeTranslatorTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources: [RealtimeTranslatorTests]
+    dependencies:
+      - target: RealtimeTranslator
