@@ -1,7 +1,11 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+
+export interface AppIdentity {
+  safetyIdentifier: string;
+}
 
 export interface TokenVerifier {
-  verifyAuthorizationHeader(header: string | undefined): boolean;
+  authenticateAuthorizationHeader(header: string | undefined): AppIdentity | null;
 }
 
 function digest(token: string): Buffer {
@@ -9,23 +13,32 @@ function digest(token: string): Buffer {
 }
 
 export class StaticTokenVerifier implements TokenVerifier {
-  readonly #tokenHashes: Buffer[];
+  readonly #entries: Array<{ tokenHash: Buffer; identity: AppIdentity }>;
 
-  constructor(tokens: string[]) {
-    this.#tokenHashes = tokens.filter(Boolean).map(digest);
+  constructor(tokens: string[], safetyIdentifierSecret: string) {
+    this.#entries = tokens.filter(Boolean).map((token) => ({
+      tokenHash: digest(token),
+      identity: {
+        safetyIdentifier: `inst_${createHmac('sha256', safetyIdentifierSecret)
+          .update(token, 'utf8')
+          .digest('hex')
+          .slice(0, 32)}`
+      }
+    }));
   }
 
-  verifyAuthorizationHeader(header: string | undefined): boolean {
+  authenticateAuthorizationHeader(header: string | undefined): AppIdentity | null {
     if (header === undefined || !header.startsWith('Bearer ')) {
-      return false;
+      return null;
     }
 
     const token = header.slice('Bearer '.length);
     if (token.length === 0) {
-      return false;
+      return null;
     }
 
     const candidate = digest(token);
-    return this.#tokenHashes.some((expected) => timingSafeEqual(candidate, expected));
+    const match = this.#entries.find((entry) => timingSafeEqual(candidate, entry.tokenHash));
+    return match?.identity ?? null;
   }
 }
