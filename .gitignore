@@ -21,3 +21,5 @@ xcuserdata/
 .vscode/
 .DS_Store
 Thumbs.db
+
+*.xcodeproj/
