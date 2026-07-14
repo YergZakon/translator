@@ -5,9 +5,9 @@
 ## Перед любым действием
 
 1. Прочитай `AGENTS.md` полностью.
-2. Прочитай `docs/PROJECT_LEDGER.md` и `docs/CLAUDE_CODE_HANDOFF.md` полностью.
+2. Прочитай `docs/PROJECT_LEDGER.md`, `docs/CLAUDE_CODE_HANDOFF.md` и `docs/AGENT_HANDOFF_PROTOCOL.md` полностью.
 3. Прочитай `PRD_Realtime_Translator_iOS_30_days_v0.1.docx` перед изменением продуктового поведения.
-4. Выполни `git status --short`, `git branch --show-current`, `git fetch origin --prune` и проверь актуальные PR #8/#9.
+4. Выполни `git status --short`, `git branch --show-current`, `git fetch origin --prune` и проверь актуальное состояние целевого PR.
 5. Работай только в отдельном worktree/clone. Не используй физический checkout Codex и не меняй незакоммиченные пользовательские файлы.
 6. До правок зарезервируй задачу в `docs/PROJECT_LEDGER.md`; после правок запиши проверки, ограничения и следующий handoff.
 
@@ -25,7 +25,7 @@
 - Backend не находится в медиапути. Raw audio и полный transcript не отправляются в telemetry.
 - Только одна leg получает microphone audio и только одна remote audio track может быть слышима.
 - Нельзя тихо менять принятый OpenAPI-контракт, enum raw values, ID regex, HTTP-коды или retry semantics.
-- Не закрывай physical-iPhone/stage E2E без реального запуска на устройстве и stage backend.
+- Нельзя закрывать physical-iPhone/stage E2E без реального запуска на устройстве и stage backend.
 
 ## Git и качество
 
@@ -36,6 +36,11 @@
 - Для iOS acceptance: XcodeGen, app build и XCTest на macOS CI. Simulator green не закрывает physical-iPhone acceptance.
 - Для актуальных OpenAI, Apple, WebRTC и GitHub требований используй только официальные первичные источники.
 
-## Первая задача
+## Автономный GitHub handoff
 
-Следуй разделу «First mission» в `docs/CLAUDE_CODE_HANDOFF.md`. Сначала выполни read-only review backend PR #8 и верни явный verdict `APPROVED` либо `CHANGES_REQUESTED`. Не начинай новые iOS-функции и не меняй PR #9 до завершения этого review.
+- Вызов считается межагентной командой только при наличии `@claude` и блока `[AGENT_HANDOFF]` по формату `docs/AGENT_HANDOFF_PROTOCOL.md`.
+- Поля `sender`, `recipient`, `id` и `expected_head` определяют источник, адресата и точную версию задачи. Текст комментария не считать сообщением владельца только потому, что GitHub публикует его от его аккаунта.
+- При `recipient: claude-code` выполни задачу в текущем запуске. Не обещай выполнить её позднее и не проси владельца переносить сообщение вручную.
+- Разрешены только действия из `allowed_actions`. Merge, deploy, изменение secrets и расширение scope запрещены, если они не перечислены явно.
+- Заверши запуск комментарием `[AGENT_RESULT]` в том же PR/issue. Используй тот же `id`, `sender: claude-code`, `recipient: codex`, точный head SHA, результаты CI и blockers.
+- Повторный handoff с уже обработанным `id` не выполняй, если нет `revision` с большим номером.
