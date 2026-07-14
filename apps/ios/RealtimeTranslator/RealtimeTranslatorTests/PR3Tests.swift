@@ -14,7 +14,9 @@ final class PR3Tests: XCTestCase {
         let response = try await client.createSession(request: CreateTranslationSessionRequest(
             mode: .oneWayRuToEn,
             sourceLocaleHint: nil,
-            legs: [],
+            legs: [
+                TranslationLegRequest(clientLegId: "leg1", targetLanguage: "en")
+            ],
             app: AppInfo(version: "1.0", build: 1),
             device: DeviceInfo(osVersion: "18.0", modelClass: "iPhone")
         ))
@@ -30,6 +32,7 @@ final class PR3Tests: XCTestCase {
         XCTAssertNil(response.sessionId.firstIndex(of: "-"))
         
         // legId (if any)
+        XCTAssertFalse(response.legs.isEmpty, "Should return legs")
         for leg in response.legs {
             XCTAssertTrue(leg.legId.hasPrefix("leg_"))
             XCTAssertEqual(leg.legId.count, 36) // "leg_" is 4 chars + 32 = 36
