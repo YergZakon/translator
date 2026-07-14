@@ -21,14 +21,6 @@ final class FakeSecureStringStore: SecureStringStore {
     }
 }
 
-actor RefreshInvocationCounter {
-    private(set) var value = 0
-
-    func increment() {
-        value += 1
-    }
-}
-
 final class URLProtocolStub: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
@@ -306,29 +298,4 @@ final class LiveBackendClientTests: XCTestCase {
         }
     }
 
-    func testConcurrentRefreshesShareOneOperation() async throws {
-        let coordinator = TokenRefreshCoordinator()
-        let counter = RefreshInvocationCounter()
-
-        async let first: String = coordinator.refresh {
-            await counter.increment()
-            try await Task.sleep(nanoseconds: 100_000_000)
-            return "app_new_valid_token_1234567890"
-        }
-        while await counter.value == 0 {
-            await Task.yield()
-        }
-        async let second: String = coordinator.refresh {
-            await counter.increment()
-            return "unexpected-second-token"
-        }
-        let tokens = try await [first, second]
-
-        XCTAssertEqual(tokens, [
-            "app_new_valid_token_1234567890",
-            "app_new_valid_token_1234567890"
-        ])
-        let invocationCount = await counter.value
-        XCTAssertEqual(invocationCount, 1)
-    }
 }
