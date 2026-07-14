@@ -82,7 +82,7 @@ struct TranslationLegCredentials: Decodable, CustomStringConvertible, CustomDebu
     let clientSecret: String
     let expiresAt: String
     let callsUrl: String
-    
+
     // Do not log clientSecret
     var description: String {
         "TranslationLegCredentials(legId: \(legId), clientLegId: \(clientLegId), secret: ***)"

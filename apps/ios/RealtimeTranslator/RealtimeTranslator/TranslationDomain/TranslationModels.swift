@@ -3,7 +3,7 @@ import Foundation
 enum Side: String, Codable, CaseIterable {
     case russianSpeaker = "russian"
     case englishSpeaker = "english"
-    
+
     var displayName: String {
         switch self {
         case .russianSpeaker: return "Русский"
@@ -22,11 +22,11 @@ struct LegConfiguration: Decodable, CustomStringConvertible, CustomDebugStringCo
     let targetLanguage: String
     let clientSecret: String
     let callsUrl: String
-    
+
     var description: String {
         "LegConfiguration(clientLegId: \(clientLegId), targetLanguage: \(targetLanguage), callsUrl: \(callsUrl), secret: ***)"
     }
-    
+
     var debugDescription: String { description }
 }
 

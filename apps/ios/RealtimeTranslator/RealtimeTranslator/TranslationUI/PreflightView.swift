@@ -8,17 +8,17 @@ struct PreflightView: View {
     @State private var networkChecked = false
     @State private var audioRouteChecked = false
     @State private var isChecking = true
-    
+
     var body: some View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
-            
+
             VStack(spacing: 30) {
                 Text("Подготовка Окружения")
                     .font(.system(.title, design: .rounded))
                     .fontWeight(.bold)
                     .padding(.top, 40)
-                
+
                 VStack(spacing: 20) {
                     // Check item 1
                     HStack {
@@ -34,7 +34,7 @@ struct PreflightView: View {
                         }
                         Spacer()
                     }
-                    
+
                     // Check item 2
                     HStack {
                         Image(systemName: networkChecked ? "checkmark.circle.fill" : "circle")
@@ -49,7 +49,7 @@ struct PreflightView: View {
                         }
                         Spacer()
                     }
-                    
+
                     // Check item 3
                     HStack {
                         Image(systemName: audioRouteChecked ? "checkmark.circle.fill" : "circle")
@@ -69,9 +69,9 @@ struct PreflightView: View {
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(18)
                 .padding(.horizontal)
-                
+
                 Spacer()
-                
+
                 if isChecking {
                     VStack(spacing: 12) {
                         ProgressView()
@@ -103,7 +103,7 @@ struct PreflightView: View {
             runPreflightChecks()
         }
     }
-    
+
     private func runPreflightChecks() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             self.micPermissionGranted = true

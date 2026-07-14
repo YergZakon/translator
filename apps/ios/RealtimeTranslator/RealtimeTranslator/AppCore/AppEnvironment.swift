@@ -4,7 +4,7 @@ enum AppEnvironment: String, Codable, CaseIterable {
     case development
     case staging
     case production
-    
+
     var baseURL: URL {
         switch self {
         case .development:

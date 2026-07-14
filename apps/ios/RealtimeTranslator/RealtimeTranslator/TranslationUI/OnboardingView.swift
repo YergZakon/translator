@@ -5,7 +5,7 @@ struct OnboardingView: View {
     @State private var currentPage = 0
     @State private var micPermissionGranted = false
     @State private var isRequesting = false
-    
+
     let cards = [
         OnboardingCard(
             title: "Синхронный Перевод",
@@ -26,14 +26,14 @@ struct OnboardingView: View {
             color: .green
         )
     ]
-    
+
     var body: some View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
-            
+
             VStack {
                 Spacer()
-                
+
                 TabView(selection: $currentPage) {
                     ForEach(0..<cards.count, id: \.self) { idx in
                         VStack(spacing: 24) {
@@ -42,13 +42,13 @@ struct OnboardingView: View {
                                 .foregroundColor(cards[idx].color)
                                 .padding()
                                 .accessibilityHidden(true)
-                            
+
                             Text(cards[idx].title)
                                 .font(.system(.largeTitle, design: .rounded))
                                 .fontWeight(.bold)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
-                            
+
                             Text(cards[idx].description)
                                 .font(.body)
                                 .foregroundColor(.secondary)
@@ -60,9 +60,9 @@ struct OnboardingView: View {
                 }
                 .tabViewStyle(PageTabViewStyle())
                 .frame(maxHeight: 450)
-                
+
                 Spacer()
-                
+
                 // Indicators & Action buttons
                 VStack(spacing: 16) {
                     if currentPage == cards.count - 1 {
@@ -123,7 +123,7 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private func requestMicPermission() {
         isRequesting = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {

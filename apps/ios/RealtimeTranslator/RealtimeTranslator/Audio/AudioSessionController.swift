@@ -4,15 +4,15 @@ import AVFoundation
 class AudioSessionController: ObservableObject {
     private let diagnostics: DiagnosticsStore
     @Published var currentRoute: String = "BuiltInSpeaker"
-    
+
     init(diagnostics: DiagnosticsStore) {
         self.diagnostics = diagnostics
         setupAudioSession()
     }
-    
+
     private func setupAudioSession() {
         diagnostics.log("AudioSessionController: Setting up playAndRecord category")
-        
+
         #if targetEnvironment(simulator)
         // WebRTC RTCAudioSession setup only works properly on physical devices usually,
         // but we'll configure AVAudioSession here for the spike.
@@ -37,7 +37,7 @@ class AudioSessionController: ObservableObject {
         }
         #endif
     }
-    
+
     func enableMicrophone(_ enabled: Bool) {
         diagnostics.log("AudioSessionController: microphone enabled = \(enabled)")
     }
