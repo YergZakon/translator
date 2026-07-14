@@ -12,6 +12,11 @@ struct DeviceInfo: Codable {
 }
 
 // MARK: - Create Session Request
+enum TranslationMode: String, Codable {
+    case oneWayRuToEn = "one_way_ru_to_en"
+    case dialogue = "dialogue"
+}
+
 enum TargetLanguage: String, Codable {
     case ru = "ru"
     case en = "en"
@@ -99,3 +104,43 @@ struct AppError: Codable {
 struct ErrorEnvelope: Codable {
     let error: AppError
 }
+
+// MARK: - Test
+func testJSON() {
+    let decoder = JSONDecoder()
+    
+    // Configure decoder if needed (e.g., date strategy, but here expiresAt is String as per definition unless we parse Date, let's keep String)
+    decoder.keyDecodingStrategy = .useDefaultKeys
+    
+    let fm = FileManager.default
+    let basePath = "C:/Users/yergali/Desktop/translator-antigravity/contracts/examples"
+    
+    // Request
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: basePath + "/create-session.request.json"))
+        let decoded = try decoder.decode(CreateTranslationSessionRequest.self, from: data)
+        print("✅ decoded create-session.request.json: mode=\(decoded.mode)")
+    } catch {
+        print("❌ Error decoding request: \(error)")
+    }
+    
+    // Response
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: basePath + "/create-session.response.json"))
+        let decoded = try decoder.decode(CreateSessionResponse.self, from: data)
+        print("✅ decoded create-session.response.json: sessionId=\(decoded.sessionId), legs.count=\(decoded.legs.count)")
+    } catch {
+        print("❌ Error decoding response: \(error)")
+    }
+    
+    // Error
+    do {
+        let data = try Data(contentsOf: URL(fileURLWithPath: basePath + "/error.response.json"))
+        let decoded = try decoder.decode(ErrorEnvelope.self, from: data)
+        print("✅ decoded error.response.json: error.code=\(decoded.error.code)")
+    } catch {
+        print("❌ Error decoding error: \(error)")
+    }
+}
+
+testJSON()

@@ -42,16 +42,42 @@ class TranslationSessionStore: ObservableObject {
     
     func startSession(mode: TranslationMode) async {
         state = .preparingAudio
-        // Simulating sequence
+        
+        // Simulating checking mic/speaker permissions
         do {
             try await Task.sleep(nanoseconds: 500_000_000)
+            
             state = .requestingSecret
-            try await Task.sleep(nanoseconds: 500_000_000)
+            let api = DependencyContainer.shared.sessionAPI
+            
+            let legs: [TranslationLegRequest]
+            if mode == .dialogue {
+                legs = [
+                    TranslationLegRequest(clientLegId: "ru-to-en", targetLanguage: .en),
+                    TranslationLegRequest(clientLegId: "en-to-ru", targetLanguage: .ru)
+                ]
+            } else {
+                legs = [
+                    TranslationLegRequest(clientLegId: "ru-to-en", targetLanguage: .en)
+                ]
+            }
+            
+            let request = CreateTranslationSessionRequest(
+                mode: mode,
+                sourceLocaleHint: "ru-RU",
+                legs: legs,
+                app: AppInfo(version: "0.1.0", build: 1),
+                device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
+            )
+            
+            let response = try await api.createSession(request: request)
+            print("Session created successfully with \(response.legs.count) legs.")
+            
             state = .negotiatingWebRTC
             try await Task.sleep(nanoseconds: 500_000_000)
             state = .ready
         } catch {
-            state = .error(code: "BOOTSTRAP_FAILED", message: error.localizedDescription)
+            state = .error(code: "API_ERROR", message: error.localizedDescription)
         }
     }
     

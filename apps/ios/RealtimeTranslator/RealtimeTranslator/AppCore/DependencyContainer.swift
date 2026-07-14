@@ -5,7 +5,7 @@ class DependencyContainer: ObservableObject {
     
     let environment: AppEnvironment
     @Published var featureFlags: FeatureFlags
-    let backendClient: BackendClient
+    let sessionAPI: SessionAPI
     let audioController: AudioSessionController
     let outputArbiter: OutputArbiter
     let telemetryClient: TelemetryClient
@@ -20,7 +20,7 @@ class DependencyContainer: ObservableObject {
         
         self.diagnosticsStore = diag
         self.telemetryClient = tele
-        self.backendClient = BackendClient(environment: environment, telemetry: tele)
+        self.sessionAPI = MockBackendClient()
         self.audioController = AudioSessionController(diagnostics: diag)
         self.outputArbiter = OutputArbiter(diagnostics: diag)
     }
