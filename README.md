@@ -11,10 +11,12 @@
 ## Структура проекта
 
 - `apps/backend` — TypeScript backend, владелец Codex.
-- `apps/ios` — Swift/SwiftUI клиент, владелец Antigravity.
+- `apps/ios` — Swift/SwiftUI клиент, текущий владелец Claude Code.
 - `contracts` — совместные OpenAPI/JSON Schema контракты.
 - `docs/PROJECT_LEDGER.md` — общий журнал работ, решений, API и handoff.
 - `AGENTS.md` — обязательные правила совместной работы моделей.
+- `CLAUDE.md` — автоматически загружаемые инструкции для Claude Code.
+- `docs/CLAUDE_CODE_HANDOFF.md` — текущее состояние и порядок подхвата iOS-работ.
 - `PRD_Realtime_Translator_iOS_30_days_v0.1.docx` — исходный PRD.
 
 Каталоги приложений и контрактов будут создаваться по мере принятия ADR-01 и первых задач.

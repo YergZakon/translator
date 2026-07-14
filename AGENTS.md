@@ -1,4 +1,4 @@
-# Правила совместной работы Codex и Antigravity
+# Правила совместной работы Codex и Claude Code
 
 Главный источник требований: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`.
 
@@ -15,12 +15,12 @@
 ## Владение областями
 
 - `Codex`: backend, серверные API-контракты, схема данных, OpenAI secret broker, auth, quotas/rate limits, remote config/kill switch, серверная telemetry/observability, Docker/CI backend.
-- `Antigravity`: iOS-клиент, SwiftUI, app state/reducer, WebRTC transport, audio gate, OutputArbiter, subtitles, diagnostics UI, клиентские API-адаптеры и iOS-тесты.
+- `Claude Code`: iOS-клиент, SwiftUI, app state/reducer, WebRTC transport, audio gate, OutputArbiter, subtitles, diagnostics UI, клиентские API-адаптеры и iOS-тесты.
 - `Shared`: `contracts/**`, общие модели запросов/ответов, telemetry schema, ADR/решения, end-to-end acceptance criteria. Изменения в shared-области сначала фиксируются как `PROPOSED`, затем принимаются обеими сторонами.
 
 ## Правила контрактов
 
-- Серверный контракт предлагает Codex; Antigravity подтверждает, что его можно реализовать и безопасно потреблять на iOS.
+- Серверный контракт предлагает Codex; Claude Code подтверждает, что его можно реализовать и безопасно потреблять на iOS.
 - После статуса `ACCEPTED` контракт меняется только новой записью решения; тихие breaking changes запрещены.
 - Временные расхождения оформляются как mock/fixture с версией и сроком удаления.
 - Standard OpenAI API key никогда не попадает в iOS-код, fixtures, логи или документацию.
@@ -30,8 +30,8 @@
 ## Git и интеграция
 
 - До параллельной разработки репозиторий должен быть инициализирован в Git.
-- Codex и Antigravity работают в разных Git worktree (или отдельных клонах), а не в одном физическом checkout.
-- Ветки: `codex/be-<task-id>-<slug>` и `antigravity/ios-<task-id>-<slug>`.
+- Codex и Claude Code работают в разных Git worktree (или отдельных клонах), а не в одном физическом checkout.
+- Новые ветки: `codex/be-<task-id>-<slug>` и `claude/ios-<task-id>-<slug>`. Существующую ветку PR #9 с префиксом `antigravity/` не переименовывать до завершения PR.
 - Один commit — одна завершённая логическая задача; ID задачи указывать в сообщении commit.
 - Сначала принимается контракт/fixture, затем независимо реализуются producer и consumer.
 - Интеграция выполняется через маленькие commits/PR с обязательными тестами и обновлением журнала.
