@@ -13,7 +13,8 @@ final class PR4Tests: XCTestCase {
         }
         """.data(using: .utf8)!
         
-        let event = EventDecoder.shared.decodeEvent(from: json, side: .englishSpeaker)
+        let decoder = EventDecoder()
+        let event = decoder.decodeEvent(from: json, side: .englishSpeaker)
         
         guard case .transcriptDelta(let segment) = event else {
             XCTFail("Expected transcriptDelta event")
@@ -47,9 +48,10 @@ final class PR4Tests: XCTestCase {
         }
         """.data(using: .utf8)!
         
-        let event1 = EventDecoder.shared.decodeEvent(from: json1, side: .russianSpeaker)
-        let event2 = EventDecoder.shared.decodeEvent(from: json2, side: .russianSpeaker)
-        let event3 = EventDecoder.shared.decodeEvent(from: jsonDone, side: .russianSpeaker)
+        let decoder = EventDecoder()
+        let event1 = decoder.decodeEvent(from: json1, side: .russianSpeaker)
+        let event2 = decoder.decodeEvent(from: json2, side: .russianSpeaker)
+        let event3 = decoder.decodeEvent(from: jsonDone, side: .russianSpeaker)
         
         guard case .transcriptDelta(let seg1) = event1,
               case .transcriptDelta(let seg2) = event2,
@@ -72,7 +74,8 @@ final class PR4Tests: XCTestCase {
         }
         """.data(using: .utf8)!
         
-        let event = EventDecoder.shared.decodeEvent(from: json, side: .englishSpeaker)
+        let decoder = EventDecoder()
+        let event = decoder.decodeEvent(from: json, side: .englishSpeaker)
         
         guard case .connectionStateChanged(let state) = event else {
             XCTFail("Expected connectionStateChanged event")

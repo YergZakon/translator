@@ -10,6 +10,8 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
     private var dataChannel: RTCDataChannel?
     private var localAudioTrack: RTCAudioTrack?
     
+    private let eventDecoder = EventDecoder()
+    
     private var desiredOutputEnabled: Bool = false
     private var isClosedByServer: Bool = false
     
@@ -223,7 +225,7 @@ extension OpenAITranslationLeg: RTCDataChannelDelegate {
     }
     
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-        if let event = EventDecoder.shared.decodeEvent(from: buffer.data, side: self.side) {
+        if let event = eventDecoder.decodeEvent(from: buffer.data, side: self.side) {
             if case .connectionStateChanged(let state) = event, state == .disconnected {
                 self.isClosedByServer = true
             }

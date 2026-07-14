@@ -17,7 +17,6 @@ struct TranscriptDoneEvent: Codable {
 }
 
 class EventDecoder {
-    static let shared = EventDecoder()
     private let decoder: JSONDecoder
     
     private var activeSyntheticIds: [String: String] = [:]
