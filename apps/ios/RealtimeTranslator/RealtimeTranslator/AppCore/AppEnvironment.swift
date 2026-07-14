@@ -5,6 +5,8 @@ enum AppEnvironment: String, Codable, CaseIterable {
     case staging
     case production
 
+    static var current: AppEnvironment = .development
+
     var baseURL: URL {
         switch self {
         case .development:

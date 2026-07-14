@@ -3,7 +3,7 @@ import Foundation
 // MARK: - API Protocols
 
 protocol SessionAPI {
-    func createSession(request: CreateTranslationSessionRequest) async throws -> CreateSessionResponse
+    func createSession(request: CreateTranslationSessionRequest, idempotencyKey: String) async throws -> CreateSessionResponse
 }
 
 protocol ConfigAPI {
@@ -65,7 +65,7 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
         return ConfigResponse(etag: lastETag, config: config, isNotModified: false)
     }
 
-    func createSession(request: CreateTranslationSessionRequest) async throws -> CreateSessionResponse {
+    func createSession(request: CreateTranslationSessionRequest, idempotencyKey: String) async throws -> CreateSessionResponse {
         // Simulate network latency
         try await Task.sleep(nanoseconds: 1_200_000_000)
 
