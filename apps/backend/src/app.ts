@@ -373,6 +373,17 @@ export function buildApp(options: BuildAppOptions = {}) {
         return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
       }
 
+      const active = configService.getGlobalActiveConfig();
+      if (active.config.killSwitch) {
+        return sendError(
+          request,
+          reply,
+          503,
+          'KILL_SWITCH_ACTIVE',
+          active.config.killSwitchMessage ?? 'Translation service is temporarily disabled'
+        );
+      }
+
       try {
         const credentials = await sessionService.recreateLeg(request.body, {
           sessionId: request.params.sessionId,

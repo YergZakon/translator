@@ -261,6 +261,21 @@ test('POST /v1/translation-sessions/{id}/legs creates fresh credentials for the 
   assert.equal(broker.calls[1]?.safetyIdentifier, broker.calls[0]?.safetyIdentifier);
 });
 
+test('POST /v1/translation-sessions/{id}/legs blocks recreation when kill switch is active', async () => {
+  const broker = new RecordingBroker();
+  const response = await makeApp(broker, true).inject({
+    method: 'POST',
+    url: '/v1/translation-sessions/ts_aaaaaaaaaaaaaaaaaaaaaaaa/legs',
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error.code, 'KILL_SWITCH_ACTIVE');
+  assert.equal(response.json().error.message, 'Pilot is paused');
+  assert.equal(broker.calls.length, 0);
+});
+
 test('leg recreation coalesces an idempotent retry without minting another secret', async () => {
   const broker = new RecordingBroker();
   const app = makeApp(broker);
