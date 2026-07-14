@@ -1,0 +1,23 @@
+# Local tools and secrets
+.tools/
+.env
+.env.*
+!.env.example
+
+# Node.js / backend
+node_modules/
+dist/
+coverage/
+*.log
+
+# Swift / Xcode
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
