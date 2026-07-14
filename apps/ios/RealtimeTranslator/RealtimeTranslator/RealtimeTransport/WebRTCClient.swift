@@ -10,6 +10,9 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
     private var dataChannel: RTCDataChannel?
     private var localAudioTrack: RTCAudioTrack?
     
+    private var desiredOutputEnabled: Bool = false
+    private var isClosedByServer: Bool = false
+    
     // To support AsyncStream
     private var continuation: AsyncStream<TranslationEvent>.Continuation?
     lazy var events: AsyncStream<TranslationEvent> = {
@@ -74,6 +77,7 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
         try await setRemoteDescription(answer, for: pc)
         
         // Ensure remote output is initially disabled until state machine enables it
+        self.desiredOutputEnabled = false
         await setOutputEnabled(false)
     }
     
@@ -83,6 +87,7 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
     }
     
     func setOutputEnabled(_ enabled: Bool) async {
+        self.desiredOutputEnabled = enabled
         // Find remote audio tracks and mute/unmute
         if let receivers = peerConnection?.receivers {
             for receiver in receivers {
@@ -104,7 +109,12 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
             if let data = closeEvent.data(using: .utf8) {
                 dc.sendData(RTCDataBuffer(data: data, isBinary: false))
             }
-            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms drain
+            
+            // Poll wait for session.closed event up to 2 seconds
+            for _ in 0..<20 {
+                if self.isClosedByServer { break }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
         }
         
         dataChannel?.close()
@@ -180,6 +190,13 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
 // MARK: - RTCPeerConnectionDelegate
 extension OpenAITranslationLeg: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
+    
+    func peerConnection(_ peerConnection: RTCPeerConnection, didAdd rtpReceiver: RTCRtpReceiver, streams mediaStreams: [RTCMediaStream]) {
+        if let track = rtpReceiver.track as? RTCAudioTrack {
+            track.isEnabled = self.desiredOutputEnabled
+        }
+    }
+    
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
@@ -207,6 +224,9 @@ extension OpenAITranslationLeg: RTCDataChannelDelegate {
     
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         if let event = EventDecoder.shared.decodeEvent(from: buffer.data, side: self.side) {
+            if case .connectionStateChanged(let state) = event, state == .disconnected {
+                self.isClosedByServer = true
+            }
             continuation?.yield(event)
         }
     }
