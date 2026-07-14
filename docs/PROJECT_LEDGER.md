@@ -2,11 +2,14 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 09:34 +05:00
+- Обновлено: 2026-07-14 09:36 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
-- Состояние проекта: `SETUP`
-- Git: локальный репозиторий инициализирован на `main`; `origin` = `https://github.com/YergZakon/translator.git`; remote доступен и пока пуст
-- Рабочие копии: отдельный Git worktree/clone для каждой модели; общий физический checkout запрещён
+- Состояние проекта: `READY_FOR_PARALLEL_WORK`
+- Git: baseline `fa2b62b` опубликован в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
+- Интеграционная копия: `C:\Users\yergali\Desktop\переводчик`, ветка `main`
+- Codex worktree: `C:\Users\yergali\Desktop\translator-codex`, ветка `codex/be-api-01-contracts`
+- Antigravity worktree: `C:\Users\yergali\Desktop\translator-antigravity`, ветка `antigravity/ios-ios-01-skeleton`
+- Общий физический checkout для двух моделей запрещён
 - Главный принцип архитектуры: прямой WebRTC между iOS и OpenAI; backend выдаёт короткоживущие secrets и не находится в медиапути
 
 ## 1. Роли и границы
@@ -64,13 +67,13 @@
 
 | ID | Область | Задача | Owner | Status | Ветка | Файлы/выход | Depends on | Проверка |
 |---|---|---|---|---|---|---|---|---|
-| SETUP-01 | Shared | Инициализировать Git, `.gitignore`, базовые ветки и README | Codex | IN_PROGRESS | `main` | Git/origin, `.gitignore`, `README.md` готовы; остался baseline push | — | `git status`, clean remote baseline |
+| SETUP-01 | Shared | Инициализировать Git, `.gitignore`, базовые ветки и README | Codex | DONE | `main` | GitHub baseline и отдельные worktrees готовы | — | commit `fa2b62b`; `git worktree list` |
 | ADR-01 | Shared | Выбрать Fastify или NestJS и структуру monorepo | Codex + Antigravity review | TODO | — | Решение D-002 | SETUP-01 | Обе стороны приняли |
-| API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | TODO | — | `contracts/openapi.yaml` | ADR-01 | lint + Antigravity review |
+| API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | TODO | `codex/be-api-01-contracts` | `contracts/openapi.yaml` | ADR-01 | lint + Antigravity review |
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
 | BE-01 | Backend | Health/config API skeleton | Codex | TODO | — | backend service | ADR-01 | unit + HTTP contract tests |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | TODO | — | backend service | BE-01, API-01 | mocked upstream + secret redaction |
-| IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | TODO | — | iOS project | SETUP-01, ADR-01 | build on simulator/device |
+| IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | TODO | `antigravity/ios-ios-01-skeleton` | iOS project | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | TODO | — | SwiftUI views | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | TODO | — | iOS client layer | API-01 | fixtures decode, error mapping |
 | IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | TODO | — | transport layer | BE-02, IOS-01 | physical iPhone spike |
@@ -215,6 +218,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 09:36 +05:00 | Codex | SETUP-01 complete | Baseline `fa2b62b` опубликован в `main`; созданы отдельные Codex и Antigravity worktrees/ветки | `git push`; `git worktree list` | Обновить обе ветки из `main`; Antigravity принимает H-001; ADR-01/API-01 |
 | 2026-07-14 09:34 +05:00 | Codex | SETUP-01 GitHub auth | Подтверждена авторизация `YergZakon`; добавлена `.gitattributes` для LF и binary DOCX | `gh auth status`; `gh repo view`: public, empty | Baseline commit/push; создать worktrees |
 | 2026-07-14 09:30 +05:00 | Codex | SETUP-01 tooling | Установлен portable GitHub CLI v2.96.0 в ignored `.tools`; добавлены `.gitignore` и `README.md` | `gh --version`; `.tools/` исключён из Git | Выполнить `gh auth login`; baseline commit/push; создать worktrees |
 | 2026-07-14 09:22 +05:00 | Codex | SETUP-01 | Инициализирован Git `main`; добавлен `origin` на `YergZakon/translator` | `git remote -v`; `git ls-remote --symref origin HEAD` подтвердил доступный пустой remote | Установить/auth `gh`; создать baseline commit/push; затем worktrees |
@@ -225,8 +229,8 @@ Antigravity владеет реализацией. Изменение семан
 | ID | Вопрос/блокер | Owner | Deadline | Что разблокирует | Status |
 |---|---|---|---|---|---|
 | B-001 | Проект ещё не является Git-репозиторием | Codex | 2026-07-14 | Изолированные ветки и безопасная интеграция | RESOLVED |
-| B-002 | Не созданы отдельные worktree/clone для моделей | Владелец/Codex | До параллельного кода | Исключение перезаписи незакоммиченных файлов | OPEN |
-| B-003 | Portable GitHub CLI установлен, но ещё не авторизован; baseline не опубликован | Codex | 2026-07-14 | Аутентифицированная публикация и дальнейшие PR | RESOLVED |
+| B-002 | Не созданы отдельные worktree/clone для моделей | Codex | 2026-07-14 | Исключение перезаписи незакоммиченных файлов | RESOLVED |
+| B-003 | Установить portable GitHub CLI и авторизовать `YergZakon` | Codex | 2026-07-14 | Аутентифицированная публикация и дальнейшие PR | RESOLVED |
 | Q-001 | Fastify или NestJS? | Codex, review Antigravity | Day 1 | Backend skeleton/OpenAPI tooling | OPEN |
 | Q-002 | Maintained native WebRTC package и минимальная iOS version | Antigravity | Day 1–2 | Physical-device spike | OPEN |
 | Q-003 | Актуальные OpenAI translation endpoints/events/TTL | Codex + Antigravity | До BE-02/IOS-03 | Secret broker и event decoder | OPEN |
