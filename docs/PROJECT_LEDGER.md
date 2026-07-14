@@ -2,11 +2,11 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 09:54 +05:00
+- Обновлено: 2026-07-14 10:16 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
 - Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
-- Codex working copy: `C:\Users\yergali\Desktop\переводчик`, ветка `codex/be-api-01-contracts`
+- Codex working copy: `C:\Users\yergali\Desktop\переводчик`, ветка `codex/be-01-health-config`
 - Antigravity worktree: `C:\Users\yergali\Desktop\translator-antigravity`; отдельная ветка на каждую iOS-задачу
 - Общий физический checkout для двух моделей запрещён
 - Главный принцип архитектуры: прямой WebRTC между iOS и OpenAI; backend выдаёт короткоживущие secrets и не находится в медиапути
@@ -67,30 +67,30 @@
 | ID | Область | Задача | Owner | Status | Ветка | Файлы/выход | Depends on | Проверка |
 |---|---|---|---|---|---|---|---|---|
 | SETUP-01 | Shared | Инициализировать Git, `.gitignore`, базовые ветки и README | Codex | DONE | `main` | GitHub baseline и отдельные remote-tracking worktrees готовы | — | commits `fa2b62b`, `495c533`; clean `git worktree list` |
-| ADR-01 | Shared | Выбрать Fastify или NestJS и структуру monorepo | Codex + Antigravity review | DONE | `codex/be-api-01-contracts` | `docs/adr/0001-monorepo-backend-and-contract-first.md` | SETUP-01 | Antigravity принял D-004 |
-| API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | DONE | `codex/be-api-01-contracts` | `contracts/openapi.yaml`, fixtures | ADR-01 | Redocly lint + Antigravity decode review успешны |
+| ADR-01 | Shared | Выбрать Fastify или NestJS и структуру monorepo | Codex + Antigravity review | DONE | `codex/be-api-01-contracts` | `docs/adr/0001-monorepo-backend-and-contract-first.md` | SETUP-01 | Antigravity принял D-004; PR #1 merged |
+| API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | DONE | `codex/be-api-01-contracts` | `contracts/openapi.yaml`, fixtures | ADR-01 | Redocly lint; Swift Codable/JSONDecoder review; PR #1 merged |
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
-| BE-01 | Backend | Health/config API skeleton | Codex | TODO | — | backend service | ADR-01 | unit + HTTP contract tests |
+| BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | TODO | — | backend service | BE-01, API-01 | mocked upstream + secret redaction |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
-| IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` | iOS client layer | API-01 | fixtures decode, error mapping |
+| IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | IN_REVIEW | `antigravity/ios-ios-02-backendclient` | iOS client layer | API-01 | fixtures decode, error mapping |
 | IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | TODO | — | transport layer | BE-02, IOS-01 | physical iPhone spike |
 
 ## 4. Реестр собственных API P0
 
-Источник — PRD v0.1. Формальная draft-схема находится в `contracts/openapi.yaml`; до двустороннего review она имеет статус `IN_REVIEW`.
+Источник — PRD v0.1. Формальная схема находится в `contracts/openapi.yaml`; двусторонний review завершён в PR #1.
 
 | Метод и путь | Назначение | Auth | Идемпотентность | Owner | Status |
 |---|---|---|---|---|---|
 | `POST /v1/installations` | Регистрация анонимной установки и выдача app token | Optional app attestation | `installation_public_id` | Codex | PLANNED |
-| `GET /v1/config` | Remote config, flags, kill switch | Bearer app token | `ETag` | Codex | PLANNED |
+| `GET /v1/config` | Remote config, flags, kill switch | Bearer app token | `ETag` | Codex | IMPLEMENTED |
 | `POST /v1/translation-sessions` | App session и 1–2 translation legs | Bearer app token | `Idempotency-Key` | Codex | PLANNED |
 | `POST /v1/translation-sessions/{id}/legs` | Пересоздание leg при reconnect | Bearer app token | `Idempotency-Key` | Codex | PLANNED |
 | `POST /v1/translation-sessions/{id}/complete` | Итоговые metadata | Bearer app token | Safe repeat | Codex | PLANNED |
 | `POST /v1/translation-sessions/{id}/feedback` | Rating и категории ошибок | Bearer app token | Один updateable record | Codex | PLANNED |
 | `POST /v1/telemetry/batch` | Allowlisted события | Bearer app token | `event_id` dedupe | Codex | PLANNED |
-| `GET /v1/health` | Readiness/liveness | Internal/public minimal | — | Codex | PLANNED |
+| `GET /v1/health` | Readiness/liveness | Internal/public minimal | — | Codex | IMPLEMENTED |
 
 Общий error envelope:
 
@@ -158,7 +158,8 @@ Antigravity владеет реализацией. Изменение семан
 | Service/function | Вход/выход | Инвариант | Owner | Status |
 |---|---|---|---|---|
 | `InstallationService.register` | public installation id → app token | Token хранится только как hash | Codex | PLANNED |
-| `ConfigService.getActiveConfig` | installation/build → config + ETag | Kill switch проверяется до создания session | Codex | PLANNED |
+| `ConfigService.getActiveConfig` | installation/build → config + ETag | Kill switch проверяется до создания session | Codex | IMPLEMENTED |
+| `HealthService.getStatus` | readiness state → minimal health response | Не раскрывает secrets или внутреннюю topology | Codex | IMPLEMENTED |
 | `SessionService.create` | validated request → app session + 1–2 legs | Одна операция/результат на idempotency key | Codex | PLANNED |
 | `LegService.recreate` | session/leg/reason → fresh leg secret | Старый secret не переиспользуется | Codex | PLANNED |
 | `OpenAISecretBroker.create` | target language + safety id → short-lived secret | Standard API key никогда не возвращается клиенту | Codex | PLANNED |
@@ -213,7 +214,8 @@ Antigravity владеет реализацией. Изменение семан
 | H-001 | Codex | Antigravity | Стартовые правила, разделение ролей и временный реестр API | `AGENTS.md`, этот файл | Сверено с PRD v0.1 | OpenAPI и signatures ещё не созданы | Antigravity подтверждает D-001..D-003 и резервирует первую iOS задачу | CLOSED |
 | H-002 | Antigravity | Codex | Скелет iOS-приложения и настройки окружений готовы | `apps/ios/RealtimeTranslator` | Соответствует структуре модулей из PRD 9.1, проектный файл готов к открытию в Xcode | На Windows сборка не тестировалась; требуется запуск на macOS | Успешное открытие и сборка RealtimeTranslator.xcodeproj на macOS | OPEN |
 | H-003 | Antigravity | Codex | Интерфейсы экранов и стейт-машина готовы к интеграции | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | Протестировано переключение состояний на симулированном потоке | Нет | Codex может использовать готовые экраны и моки для API-01/BE-01 | OPEN |
-| H-004 | Codex | Antigravity | Draft HTTP API P0, fixtures и ADR-0001 готовы для IOS-02 | `contracts/`, `docs/adr/0001-monorepo-backend-and-contract-first.md` | Redocly: valid, 0 warnings; JSON fixtures parse | Telemetry `properties` остаются draft до TEL-01; secret TTL нельзя предполагать | Подтвердить D-004; декодировать fixtures и вернуть замечания к DTO/error mapping | CLOSED |
+| H-004 | Codex | Antigravity | Draft HTTP API P0, fixtures и ADR-0001 готовы для IOS-02 | `contracts/`, `docs/adr/0001-monorepo-backend-and-contract-first.md` | Redocly: valid, 0 warnings; JSON fixtures parse; Swift Codable review passed | Telemetry `properties` остаются draft до TEL-01; secret TTL нельзя предполагать | Подтвердить D-004; декодировать fixtures и вернуть замечания к DTO/error mapping | CLOSED |
+| H-005 | Codex | Antigravity | Реализация health/config по принятому контракту, включая ETag/304 и error envelope | `apps/backend/` | Typecheck; 6/6 HTTP inject tests; production build | До BE installation flow app tokens задаются через `APP_TOKENS`; это prototype-only bootstrap | Подключить `ConfigAPI`/mock к полям AppConfig и проверить 200/304/401 | OPEN |
 
 ## 9. Хронология
 
@@ -221,7 +223,9 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 10:16 +05:00 | Codex | BE-01 complete | Реализованы Fastify health/config, ETag/304, hash-only token verifier, runtime config, workspace manifests и production build | Typecheck; 6/6 HTTP inject tests; build; secret scan без production secrets | Commit/push; draft PR; Antigravity использует H-005 в IOS-02; Codex начинает BE-02 после review |
 | 2026-07-14 10:10 +05:00 | Antigravity | IOS-02 complete | Созданы `APIContracts.swift` и `MockBackendClient` с использованием фикстур; обновлён `TranslationSessionStore` | Компилируется, стейт машина корректно запрашивает секреты с задержкой сети | WebRTC spike (IOS-03) |
+| 2026-07-14 10:06 +05:00 | Codex | PR #1 merged; BE-01 start | Зафиксировано принятие ADR-0001/API-01/D-004 и начало health/config backend skeleton | Antigravity Swift Codable/JSONDecoder review passed; merge commit `bfc5a10` | Реализовать и протестировать BE-01; Antigravity продолжает IOS-02 |
 | 2026-07-14 10:05 +05:00 | Antigravity | ADR-0001 & API-01 review | Проверена Swift Codable совместимость `contracts/openapi.yaml`, fixtures успешно распарсены. D-004 принят (Fastify). H-004 закрыт. Начало работы над IOS-02. | Маппинг DTO написан и сверен; types/enums/secrets совпадают | Antigravity реализует `BackendClient` в iOS |
 | 2026-07-14 09:54 +05:00 | Codex | ADR-01/API-01 review handoff | Добавлены ADR-0001, OpenAPI 3.1 и fixtures; подтверждены official OpenAI translation endpoints/events | Redocly valid, 0 warnings; 3 JSON fixtures parse; official docs review | Commit/push; Antigravity reviews H-004 и начинает IOS-02 |
 | 2026-07-14 09:48 +05:00 | Antigravity | UX-01 complete | Реализованы экраны Onboarding, Home, Preflight, Live, Result, Diagnostics, добавлены премиум стили, поддержка Dynamic Type и VoiceOver | Сгенерированы файлы и обновлен проектный файл Xcode | Antigravity ждет контрактов для IOS-02 или начинает WebRTC-spike (IOS-03) |
@@ -240,7 +244,7 @@ Antigravity владеет реализацией. Изменение семан
 | B-001 | Проект ещё не является Git-репозиторием | Codex | 2026-07-14 | Изолированные ветки и безопасная интеграция | RESOLVED |
 | B-002 | Не созданы отдельные worktree/clone для моделей | Codex | 2026-07-14 | Исключение перезаписи незакоммиченных файлов | RESOLVED |
 | B-003 | Установить portable GitHub CLI и авторизовать `YergZakon` | Codex | 2026-07-14 | Аутентифицированная публикация и дальнейшие PR | RESOLVED |
-| Q-001 | Fastify или NestJS? | Codex, review Antigravity | Day 1 | Backend skeleton/OpenAPI tooling | RESOLVED — Fastify accepted via D-004 |
+| Q-001 | Fastify или NestJS? | Codex, review Antigravity | Day 1 | Backend skeleton/OpenAPI tooling | RESOLVED — Fastify accepted in D-004 |
 | Q-002 | Maintained native WebRTC package и минимальная iOS version | Antigravity | Day 1–2 | Physical-device spike | OPEN |
 | Q-003 | Актуальные OpenAI translation endpoints/events/TTL | Codex + Antigravity | До BE-02/IOS-03 | Secret broker и event decoder | IN_REVIEW — endpoints/events verified; TTL treated as dynamic |
 
