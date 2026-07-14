@@ -8,17 +8,21 @@ From the repository root:
 
 ```powershell
 pnpm install
-$env:APP_TOKENS = "replace-with-a-random-prototype-app-token"
+$env:DATABASE_URL = "postgres://translator:password@127.0.0.1:5432/translator"
 $env:SAFETY_IDENTIFIER_SECRET = "replace-with-at-least-32-random-characters"
 $env:OPENAI_API_KEY = "server-side-key-from-secret-manager"
 pnpm --filter @translator/backend dev
 ```
 
-`GET /v1/health` is public and minimal. `GET /v1/config` requires `Authorization: Bearer <app-token>`, `X-App-Version`, and `X-App-Build`. Raw tokens are hashed on startup and are never retained by the verifier.
+The service applies versioned PostgreSQL migrations under an advisory lock before it starts listening.
+
+`POST /v1/installations` is public and registers or recovers an anonymous installation. It returns a high-entropy app token once; PostgreSQL stores only its SHA-256 hash. Re-registering the same `installationPublicId` rotates the token and invalidates the old token. Forbidden installations cannot rotate or authenticate.
+
+`GET /v1/health` is public and minimal. `GET /v1/config` requires `Authorization: Bearer <app-token>`, `X-App-Version`, and `X-App-Build`. The safety identifier is stable across token rotation and is derived from the internal installation ID using the server-side safety secret.
 
 `POST /v1/translation-sessions` validates the accepted OpenAPI request, enforces kill-switch and idempotency rules, and mints one or two short-lived translation secrets through OpenAI. The standard API key stays server-side. Provider error bodies, Authorization headers, client secrets, SDP, audio, and transcripts are not logged.
 
-The current idempotency store is process-local and evicts responses when their provider credentials expire. Persistent cross-restart idempotency moves to the PostgreSQL-backed session task.
+The current session idempotency store is process-local and evicts responses when their provider credentials expire. Persistent cross-restart session idempotency remains a separate task; installation auth is PostgreSQL-backed.
 
 ## Checks
 
@@ -40,7 +44,7 @@ Runtime secrets are required when the container starts and are never copied into
 
 ```powershell
 docker run --rm -p 3000:3000 `
-  -e APP_TOKENS="replace-with-a-random-prototype-app-token" `
+  -e DATABASE_URL="postgres://translator:password@host.docker.internal:5432/translator" `
   -e SAFETY_IDENTIFIER_SECRET="replace-with-at-least-32-random-characters" `
   -e OPENAI_API_KEY="server-side-key-from-secret-manager" `
   translator-backend:local
