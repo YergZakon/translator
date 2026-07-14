@@ -76,7 +76,7 @@
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` / PR #3 | iOS client layer | API-01 | Review findings closed; PR-wide diff clean; macOS build/XCTest green |
-| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | IN_REVIEW | `antigravity/ios-ios-03-webrtc` / PR #4 | transport layer | BE-02, IOS-01 | Review findings closed; corrected SPM binary source under CI; physical iPhone check open |
+| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | DONE | `antigravity/ios-ios-03-webrtc` / PR #4 | transport layer | BE-02, IOS-01 | Review findings closed; SPM resolve, Xcode build and XCTest green; physical iPhone check remains separate/open |
 
 ## 4. Реестр собственных API P0
 
@@ -225,6 +225,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 11:50 +05:00 | Codex | IOS-03 simulator acceptance complete | Corrected WebRTC binary package resolved and compiled on macOS; IOS-03 marked DONE for CI/simulator scope | Actions run `29312358490`: package resolve, Xcode 16.4 build and XCTest success | Merge PR #4 after final exact-head check; deploy BE-02 to stage; run physical iPhone E2E separately |
 | 2026-07-14 11:45 +05:00 | Codex | IOS-03 CI dependency fix | WebRTC SPM URL corrected from source-only `webrtc-sdk/WebRTC` to binary package `stasel/WebRTC`; version stays `125.0.0` | Run `29312118786` failed before build: no matching package version; tag `125.0.0` verified in replacement repository | Push focused fix; rerun XcodeGen, simulator build and XCTest; physical iPhone remains open |
 | 2026-07-14 11:40 +05:00 | Codex | IOS-02 merged / IOS-03 retargeted | Последний macOS CI PR #3 green; PR #3 merged as `194ec0e`; PR #4 base changed to `main`, `origin/main` merged cleanly | Actions run `29311548132`: XcodeGen, build, XCTest success; PR #4 diff check clean | Push synced PR #4; require its own green macOS CI before merge; physical iPhone remains open |
 | 2026-07-14 11:28 +05:00 | Codex | CI-01 complete / IOS-02 accepted | Workflow `03fbfac` опубликован в PR #3; XcodeGen и iOS checks выполнены на GitHub-hosted Mac | Actions run `29311153309`: Xcode 16.4 build success; XCTest success; iPhone 16 Pro / iOS 18.5 | Merge PR #3; retarget/run CI for stacked PR #4; physical iPhone remains open |
