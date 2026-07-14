@@ -45,43 +45,6 @@ jobs:
           -scheme RealtimeTranslator
           -resolvePackageDependencies
 
-      - name: Prepare iOS simulator
-        id: simulator
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          simulator_id="$(
-            xcrun simctl list devices available --json |
-              jq -r '[
-                .devices | to_entries[] |
-                select(.key | contains(".iOS-")) |
-                .value[] |
-                select(.isAvailable == true)
-              ][0].udid // empty'
-          )"
-
-          if [[ -z "$simulator_id" ]]; then
-            runtime_id="$(
-              xcrun simctl list runtimes --json |
-                jq -r '[.runtimes[] | select(.isAvailable == true and (.identifier | contains("iOS")))][-1].identifier // empty'
-            )"
-            device_type_id="$(
-              xcrun simctl list devicetypes --json |
-                jq -r '[.devicetypes[] | select(.name == "iPhone 16 Pro")][0].identifier // [.devicetypes[] | select(.name | startswith("iPhone"))][0].identifier // empty'
-            )"
-
-            if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
-              echo "No available iOS runtime or iPhone device type was found." >&2
-              xcrun simctl list
-              exit 1
-            fi
-
-            simulator_id="$(xcrun simctl create RealtimeTranslator-CI "$device_type_id" "$runtime_id")"
-          fi
-
-          echo "simulator_id=$simulator_id" >> "$GITHUB_OUTPUT"
-
       - name: Build app
         run: >-
           xcodebuild
@@ -96,7 +59,7 @@ jobs:
           xcodebuild
           -project RealtimeTranslator.xcodeproj
           -scheme RealtimeTranslatorTests
-          -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.simulator_id }}'
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5'
           -destination-timeout 120
           CODE_SIGNING_ALLOWED=NO
           -test-timeouts-enabled YES
