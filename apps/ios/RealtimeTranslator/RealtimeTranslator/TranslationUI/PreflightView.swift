@@ -5,75 +5,115 @@ struct PreflightView: View {
     @Binding var isConfirmed: Bool
     @EnvironmentObject var container: DependencyContainer
     @State private var micPermissionGranted = false
+    @State private var networkChecked = false
+    @State private var audioRouteChecked = false
     @State private var isChecking = true
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Проверка готовности")
-                .font(.title)
-                .fontWeight(.bold)
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
             
-            VStack(alignment: .leading, spacing: 15) {
-                HStack {
-                    Image(systemName: micPermissionGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(micPermissionGranted ? .green : .red)
-                    Text("Доступ к микрофону")
-                }
+            VStack(spacing: 30) {
+                Text("Подготовка Окружения")
+                    .font(.system(.title, design: .rounded))
+                    .fontWeight(.bold)
+                    .padding(.top, 40)
                 
-                HStack {
-                    Image(systemName: "wifi")
-                        .foregroundColor(.green)
-                    Text("Сеть готова (Dev environment)")
+                VStack(spacing: 20) {
+                    // Check item 1
+                    HStack {
+                        Image(systemName: micPermissionGranted ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(micPermissionGranted ? .green : .secondary)
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Разрешение микрофона")
+                                .fontWeight(.medium)
+                            Text(micPermissionGranted ? "Доступ предоставлен" : "Ожидание доступа...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    
+                    // Check item 2
+                    HStack {
+                        Image(systemName: networkChecked ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(networkChecked ? .green : .secondary)
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Подключение к интернету")
+                                .fontWeight(.medium)
+                            Text(networkChecked ? "Соединение стабильное" : "Проверка сети...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    
+                    // Check item 3
+                    HStack {
+                        Image(systemName: audioRouteChecked ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(audioRouteChecked ? .green : .secondary)
+                            .font(.title2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Аудиомаршрут")
+                                .fontWeight(.medium)
+                            Text("Выход: \(container.audioController.currentRoute)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
                 }
+                .padding(24)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(18)
+                .padding(.horizontal)
                 
-                HStack {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .foregroundColor(.green)
-                    Text("Аудиовыход: \(container.audioController.currentRoute)")
-                }
-            }
-            .padding()
-            .background(Color.secondary.opacity(0.1))
-            .cornerRadius(8)
-            
-            if isChecking {
-                ProgressView("Проверка оборудования...")
+                Spacer()
+                
+                if isChecking {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Проверяем доступность сервисов...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     .padding()
-            } else if !micPermissionGranted {
-                Button("Разрешить доступ к микрофону") {
-                    requestMicPermission()
+                } else {
+                    Button(action: {
+                        isConfirmed = true
+                    }) {
+                        Text("Начать перевод")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 40)
+                    .accessibilityLabel("Начать сессию перевода")
                 }
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-            } else {
-                Button("Начать перевод") {
-                    isConfirmed = true
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(Color.green)
-                .foregroundColor(.white)
-                .cornerRadius(12)
-                .padding(.top, 20)
             }
         }
-        .padding()
         .onAppear {
-            checkPermissions()
+            runPreflightChecks()
         }
     }
     
-    private func checkPermissions() {
-        // Mock permission check
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+    private func runPreflightChecks() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             self.micPermissionGranted = true
-            self.isChecking = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                self.networkChecked = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    self.audioRouteChecked = true
+                    self.isChecking = false
+                }
+            }
         }
-    }
-    
-    private func requestMicPermission() {
-        self.micPermissionGranted = true
     }
 }
