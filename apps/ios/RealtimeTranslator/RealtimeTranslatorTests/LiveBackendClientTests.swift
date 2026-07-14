@@ -162,6 +162,20 @@ final class LiveBackendClientTests: XCTestCase {
         XCTAssertTrue(response.description.contains("***"))
     }
 
+    func testRegistrationRequestEncodesContractDeviceModel() throws {
+        let request = RegisterInstallationRequest(
+            installationPublicId: UUID(uuidString: "01234567-89AB-CDEF-0123-456789ABCDEF")!,
+            app: AppInfo(version: "1.0", build: 1),
+            device: DeviceInfo(osVersion: "18.5", modelClass: "phone")
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let device = try XCTUnwrap(json["device"] as? [String: Any])
+
+        XCTAssertEqual(device["modelClass"] as? String, "phone")
+    }
+
     func test401RetryOnceWithReRegistration() async throws {
         let memoryStorage = MemoryTokenStorage(appToken: "app_expired_token_1234567890")
 
@@ -205,12 +219,6 @@ final class LiveBackendClientTests: XCTestCase {
             } else if request.url?.path == "/v1/installations" && request.httpMethod == "POST" {
                 registered = true
                 XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
-                let body = try XCTUnwrap(request.httpBody)
-                let json = try XCTUnwrap(
-                    JSONSerialization.jsonObject(with: body) as? [String: Any]
-                )
-                let device = try XCTUnwrap(json["device"] as? [String: Any])
-                XCTAssertEqual(device["modelClass"] as? String, "phone")
                 let responseJSON = """
                 {
                   "installationId": "ins_01234567890123456789",
