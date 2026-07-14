@@ -1,0 +1,22 @@
+{
+  "mode": "dialogue",
+  "sourceLocaleHint": "ru-KZ",
+  "legs": [
+    {
+      "clientLegId": "ru-to-en",
+      "targetLanguage": "en"
+    },
+    {
+      "clientLegId": "en-to-ru",
+      "targetLanguage": "ru"
+    }
+  ],
+  "app": {
+    "version": "0.1.0",
+    "build": 42
+  },
+  "device": {
+    "osVersion": "26.0",
+    "modelClass": "phone"
+  }
+}
