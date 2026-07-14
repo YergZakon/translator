@@ -12,7 +12,7 @@ enum AppEnvironment: String, Codable, CaseIterable {
         case .development:
             return URL(string: "http://localhost:3000")!
         case .staging:
-            return URL(string: "https://stage-api.translator.internal")!
+            return URL(string: "https://backend-api-stage-ee06.up.railway.app")!
         case .production:
             return URL(string: "https://api.translator.internal")!
         }
