@@ -2,7 +2,7 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 10:51 +05:00
+- Обновлено: 2026-07-14 11:03 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
 - Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
@@ -71,7 +71,7 @@
 | API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | DONE | `codex/be-api-01-contracts` | `contracts/openapi.yaml`, fixtures | ADR-01 | Redocly lint; Swift Codable/JSONDecoder review; PR #1 merged |
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
 | BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
-| BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity review pending |
+| BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity contract/security review passed via handoff |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | IN_REVIEW | `antigravity/ios-ios-02-backendclient` / PR #3 | iOS client layer | API-01 | Codex contract review findings open; fixtures decode, error mapping |
@@ -224,6 +224,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 11:03 +05:00 | Antigravity / Codex | BE-02 PR #5 accepted | Antigravity подтвердил Swift DTO compatibility, idempotency, ErrorEnvelope и secret isolation; Codex сверил unchanged backend head | Review verdict `APPROVED` передан через handoff; GitHub review отсутствует из-за shared owner account | Mark ready and merge PR #5; stage deploy остаётся отдельным шагом; physical iPhone E2E remains open |
 | 2026-07-14 10:51 +05:00 | Codex | BE-02 draft PR #5 published | Реализованы translation client secret broker, safety identifier, session create, 1–2 legs, idempotency, kill switch и sanitized upstream errors; commit `2adcf04` опубликован | Typecheck; 18/18 tests; build; production source secret scan clean; PR mergeable/clean | Antigravity reviews PR #5, исправляет PR #3/#4 и запускает physical iPhone E2E после merge |
 | 2026-07-14 10:34 +05:00 | Codex | iOS PR #3/#4 contract review | В PR #3 найдены raw-value mismatch, пустой ConfigAPI, невалидные mock IDs и scratch test; в PR #4 — default-on audio и нетолерантный event decoder | Inline GitHub reviews; official OpenAI translation/WebRTC docs rechecked | Antigravity исправляет stacked branches и объединяет ledger с `main` |
 | 2026-07-14 10:35 +05:00 | Codex | PR #2 merged; BE-02 start | BE-01 смержен commit `3bf4029`; начата реализация short-lived translation secret broker по official translation client_secrets endpoint | Antigravity review passed; PR #2 head SHA verified; official OpenAI translation guide rechecked | Mock upstream, redaction and session route tests; Antigravity исправляет findings PR #3/#4 |
