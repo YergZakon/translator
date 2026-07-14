@@ -72,11 +72,11 @@
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
 | BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity contract/security review passed via handoff |
-| CI-01 | Shared | macOS CI для XcodeGen, iOS build и unit tests | Codex | DONE | PR #3 / commit `03fbfac` | `.github/workflows/ios-ci.yml` | IOS-01, IOS-02 | Run `29311153309`: XcodeGen, Xcode 16.4 simulator build и XCTest passed |
+| CI-01 | Shared | macOS CI для XcodeGen, iOS build и unit tests | Codex | DONE | PR #3 / commit `03fbfac` | `.github/workflows/ios-ci.yml` | IOS-01, IOS-02 | Runs `29311153309`, `29311548132`: XcodeGen, Xcode 16.4 simulator build и XCTest passed |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` / PR #3 | iOS client layer | API-01 | Review findings closed; PR-wide diff clean; macOS build/XCTest green |
-| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | IN_REVIEW | `antigravity/ios-ios-03-webrtc` / PR #4 | transport layer | BE-02, IOS-01 | Codex WebRTC review findings open; physical iPhone check open |
+| IOS-03 | iOS | WebRTC adapter spike RU→EN | Antigravity | IN_REVIEW | `antigravity/ios-ios-03-webrtc` / PR #4 | transport layer | BE-02, IOS-01 | Review findings closed; macOS CI pending; physical iPhone check open |
 
 ## 4. Реестр собственных API P0
 
@@ -225,6 +225,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 11:40 +05:00 | Codex | IOS-02 merged / IOS-03 retargeted | Последний macOS CI PR #3 green; PR #3 merged as `194ec0e`; PR #4 base changed to `main`, `origin/main` merged cleanly | Actions run `29311548132`: XcodeGen, build, XCTest success; PR #4 diff check clean | Push synced PR #4; require its own green macOS CI before merge; physical iPhone remains open |
 | 2026-07-14 11:28 +05:00 | Codex | CI-01 complete / IOS-02 accepted | Workflow `03fbfac` опубликован в PR #3; XcodeGen и iOS checks выполнены на GitHub-hosted Mac | Actions run `29311153309`: Xcode 16.4 build success; XCTest success; iPhone 16 Pro / iOS 18.5 | Merge PR #3; retarget/run CI for stacked PR #4; physical iPhone remains open |
 | 2026-07-14 11:20 +05:00 | Codex | CI-01 start | Подготовлен macOS GitHub Actions check для XcodeGen, simulator build и XCTest на exact head PR #3 | PR #3 head `133087e`; prototype artifacts absent; PR-wide `git diff --check` clean | Push scoped workflow commit; inspect Actions logs; не merge PR #3/#4 до green CI |
 | 2026-07-14 11:03 +05:00 | Antigravity / Codex | BE-02 PR #5 accepted | Antigravity подтвердил Swift DTO compatibility, idempotency, ErrorEnvelope и secret isolation; Codex сверил unchanged backend head | Review verdict `APPROVED` передан через handoff; GitHub review отсутствует из-за shared owner account | Mark ready and merge PR #5; stage deploy остаётся отдельным шагом; physical iPhone E2E remains open |
@@ -256,7 +257,7 @@ Antigravity владеет реализацией. Изменение семан
 | Q-001 | Fastify или NestJS? | Codex, review Antigravity | Day 1 | Backend skeleton/OpenAPI tooling | RESOLVED — Fastify accepted in D-004 |
 | Q-002 | Maintained native WebRTC package и минимальная iOS version | Antigravity | Day 1–2 | Physical-device spike | OPEN |
 | Q-003 | Актуальные OpenAI translation endpoints/events/TTL | Codex + Antigravity | До BE-02/IOS-03 | Secret broker и event decoder | RESOLVED — translation client_secrets/calls и events verified; expiry берётся из provider `expires_at` |
-| B-004 | PR #3 конфликтует с `main` после merge BE-01; открыты contract/security findings PR #3/#4 | Antigravity | До iOS merge/E2E | Интеграцию iOS и physical iPhone test | OPEN — merge `origin/main`, сохранить обе ledger histories, исправить review findings |
+| B-004 | PR #3 конфликтует с `main` после merge BE-01; открыты contract/security findings PR #3/#4 | Antigravity | До iOS merge/E2E | Интеграцию iOS и physical iPhone test | RESOLVED — histories preserved, review findings closed, PR #3 merged, PR #4 retargeted to `main` |
 
 ## 11. Definition of Done
 
