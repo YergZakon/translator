@@ -17,7 +17,10 @@ function makeApp(options: Parameters<typeof buildApp>[0] = {}): FastifyInstance 
   const app = buildApp({
     serviceVersion: '0.1.0-test',
     now: () => new Date('2026-07-14T05:00:00.000Z'),
-    tokenVerifier: new StaticTokenVerifier(['test-prototype-app-token']),
+    tokenVerifier: new StaticTokenVerifier(
+      ['test-prototype-app-token'],
+      'test-safety-identifier-secret-32-characters'
+    ),
     ...options
   });
   openApps.push(app);

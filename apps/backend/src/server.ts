@@ -1,11 +1,19 @@
 import { buildApp } from './app.js';
 import { loadRuntimeConfig } from './runtime-config.js';
 import { StaticTokenVerifier } from './security/token-verifier.js';
+import { OpenAISecretBroker } from './services/openai-secret-broker.js';
 
 const runtime = loadRuntimeConfig();
 const app = buildApp({
   serviceVersion: runtime.serviceVersion,
-  tokenVerifier: new StaticTokenVerifier(runtime.appTokens),
+  tokenVerifier: new StaticTokenVerifier(
+    runtime.appTokens,
+    runtime.safetyIdentifierSecret
+  ),
+  secretBroker: new OpenAISecretBroker({
+    apiKey: runtime.openAIAPIKey,
+    requestTimeoutMs: runtime.openAIRequestTimeoutMs
+  }),
   logger: { level: runtime.logLevel }
 });
 
