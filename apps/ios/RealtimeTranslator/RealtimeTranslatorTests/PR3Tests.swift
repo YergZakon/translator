@@ -15,10 +15,10 @@ final class PR3Tests: XCTestCase {
             mode: .oneWayRuToEn,
             sourceLocaleHint: nil,
             legs: [
-                TranslationLegRequest(clientLegId: "leg1", targetLanguage: "en")
+                TranslationLegRequest(clientLegId: "leg1", targetLanguage: .en)
             ],
             app: AppInfo(version: "1.0", build: 1),
-            device: DeviceInfo(osVersion: "18.0", modelClass: "iPhone")
+            device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
         ))
         
         // traceId: "tr_" + 32 hex chars

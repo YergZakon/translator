@@ -10,11 +10,24 @@ import { defaultAppConfig, type AppConfig } from './domain/app-config.js';
 import {
   appConfigSchema,
   configHeadersSchema,
+  createSessionHeadersSchema,
+  createSessionRequestSchema,
   errorEnvelopeSchema,
-  healthResponseSchema
+  healthResponseSchema,
+  translationSessionSchema
 } from './http/schemas.js';
 import { StaticTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
 import { ConfigService } from './services/config-service.js';
+import {
+  SecretBrokerError,
+  type SecretBroker,
+  UnavailableSecretBroker
+} from './services/openai-secret-broker.js';
+import {
+  type CreateSessionRequest,
+  SessionService,
+  SessionServiceError
+} from './services/session-service.js';
 
 interface ConfigHeaders {
   authorization?: string;
@@ -23,12 +36,20 @@ interface ConfigHeaders {
   'if-none-match'?: string;
 }
 
+interface CreateSessionHeaders {
+  authorization?: string;
+  'idempotency-key': string;
+}
+
 export interface BuildAppOptions {
   serviceVersion?: string;
   now?: () => Date;
   isReady?: () => boolean;
   tokenVerifier?: TokenVerifier;
   appConfig?: AppConfig;
+  secretBroker?: SecretBroker;
+  translationCallsUrl?: string;
+  sessionIdFactory?: (prefix: 'ts' | 'leg') => string;
   logger?: FastifyServerOptions['logger'];
 }
 
@@ -42,13 +63,15 @@ function sendError(
   statusCode: number,
   code: string,
   message: string,
-  retryable = false
-): void {
-  reply.code(statusCode).send({
+  retryable = false,
+  retryAfterMs?: number
+): FastifyReply {
+  return reply.code(statusCode).send({
     error: {
       code,
       message,
       retryable,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       traceId: traceId(request)
     }
   });
@@ -57,8 +80,17 @@ function sendError(
 export function buildApp(options: BuildAppOptions = {}) {
   const now = options.now ?? (() => new Date());
   const isReady = options.isReady ?? (() => true);
-  const tokenVerifier = options.tokenVerifier ?? new StaticTokenVerifier([]);
+  const tokenVerifier =
+    options.tokenVerifier ??
+    new StaticTokenVerifier([], 'build-app-default-safety-secret-32chars');
   const configService = new ConfigService(options.appConfig ?? defaultAppConfig);
+  const sessionService = new SessionService({
+    broker: options.secretBroker ?? new UnavailableSecretBroker(),
+    ...(options.translationCallsUrl === undefined
+      ? {}
+      : { callsUrl: options.translationCallsUrl }),
+    ...(options.sessionIdFactory === undefined ? {} : { idFactory: options.sessionIdFactory })
+  });
 
   const app = Fastify({
     logger: options.logger ?? false,
@@ -115,8 +147,8 @@ export function buildApp(options: BuildAppOptions = {}) {
         }
       },
       preHandler: async (request, reply) => {
-        if (!tokenVerifier.verifyAuthorizationHeader(request.headers.authorization)) {
-          sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+        if (tokenVerifier.authenticateAuthorizationHeader(request.headers.authorization) === null) {
+          return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
         }
       }
     },
@@ -137,6 +169,79 @@ export function buildApp(options: BuildAppOptions = {}) {
       }
 
       return reply.code(200).send(active.config);
+    }
+  );
+
+  app.post<{ Headers: CreateSessionHeaders; Body: CreateSessionRequest }>(
+    '/v1/translation-sessions',
+    {
+      schema: {
+        headers: createSessionHeadersSchema,
+        body: createSessionRequestSchema,
+        response: {
+          201: translationSessionSchema,
+          400: errorEnvelopeSchema,
+          401: errorEnvelopeSchema,
+          409: errorEnvelopeSchema,
+          422: errorEnvelopeSchema,
+          429: errorEnvelopeSchema,
+          502: errorEnvelopeSchema,
+          503: errorEnvelopeSchema,
+          504: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const identity = tokenVerifier.authenticateAuthorizationHeader(request.headers.authorization);
+      if (identity === null) {
+        return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+      }
+
+      const active = configService.getActiveConfig({
+        appVersion: request.body.app.version,
+        appBuild: request.body.app.build
+      });
+      if (active.config.killSwitch) {
+        return sendError(
+          request,
+          reply,
+          503,
+          'KILL_SWITCH_ACTIVE',
+          active.config.killSwitchMessage ?? 'Translation service is temporarily disabled'
+        );
+      }
+
+      try {
+        const session = await sessionService.create(request.body, {
+          idempotencyKey: request.headers['idempotency-key'],
+          safetyIdentifier: identity.safetyIdentifier,
+          traceId: traceId(request),
+          config: active.config
+        });
+        return reply.code(201).send(session);
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return sendError(request, reply, error.httpStatus, error.code, error.message);
+        }
+        if (error instanceof SecretBrokerError) {
+          const messages = {
+            RATE_LIMITED: 'Translation session creation is rate limited',
+            UPSTREAM_SESSION_UNAVAILABLE: 'Translation session is temporarily unavailable',
+            UPSTREAM_TIMEOUT: 'Translation provider timed out',
+            SERVICE_UNAVAILABLE: 'Translation service is unavailable'
+          } as const;
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            messages[error.code],
+            error.retryable,
+            error.retryAfterMs
+          );
+        }
+        throw error;
+      }
     }
   );
 

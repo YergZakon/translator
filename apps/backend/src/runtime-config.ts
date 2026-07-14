@@ -4,6 +4,9 @@ export interface RuntimeConfig {
   logLevel: string;
   serviceVersion: string;
   appTokens: string[];
+  safetyIdentifierSecret: string;
+  openAIAPIKey: string;
+  openAIRequestTimeoutMs: number;
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
@@ -24,11 +27,29 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     throw new Error('APP_TOKENS must contain at least one prototype app token');
   }
 
+  const safetyIdentifierSecret = env.SAFETY_IDENTIFIER_SECRET ?? '';
+  if (safetyIdentifierSecret.length < 32) {
+    throw new Error('SAFETY_IDENTIFIER_SECRET must contain at least 32 characters');
+  }
+
+  const openAIAPIKey = env.OPENAI_API_KEY ?? '';
+  if (openAIAPIKey.length === 0) {
+    throw new Error('OPENAI_API_KEY is required');
+  }
+
+  const openAIRequestTimeoutMs = Number(env.OPENAI_REQUEST_TIMEOUT_MS ?? 8000);
+  if (!Number.isInteger(openAIRequestTimeoutMs) || openAIRequestTimeoutMs < 1000 || openAIRequestTimeoutMs > 30000) {
+    throw new Error('OPENAI_REQUEST_TIMEOUT_MS must be an integer between 1000 and 30000');
+  }
+
   return {
     host: env.HOST ?? '127.0.0.1',
     port: positiveInteger(env.PORT, 3000),
     logLevel: env.LOG_LEVEL ?? 'info',
     serviceVersion: env.SERVICE_VERSION ?? 'dev',
-    appTokens
+    appTokens,
+    safetyIdentifierSecret,
+    openAIAPIKey,
+    openAIRequestTimeoutMs
   };
 }
