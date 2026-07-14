@@ -2,7 +2,7 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 11:28 +05:00
+- Обновлено: 2026-07-14 12:26 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
 - Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
@@ -73,6 +73,7 @@
 | BE-01 | Backend | Health/config API skeleton | Codex | DONE | `codex/be-01-health-config` | `apps/backend/**`, `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ADR-01 | typecheck; 6/6 HTTP inject tests; production build |
 | BE-02 | Backend | OpenAI short-lived secret broker | Codex | DONE | `codex/be-02-secret-broker` / PR #5 | translation-session route, OpenAI broker, tests | BE-01, API-01 | mocked upstream; 18/18 total backend tests; secret redaction scan; Antigravity contract/security review passed via handoff |
 | CI-01 | Shared | macOS CI для XcodeGen, iOS build и unit tests | Codex | DONE | PR #3 / commit `03fbfac` | `.github/workflows/ios-ci.yml` | IOS-01, IOS-02 | Runs `29311153309`, `29311548132`: XcodeGen, Xcode 16.4 simulator build и XCTest passed |
+| CI-02 | Backend | GitHub Actions и production Docker image для backend | Codex | IN_PROGRESS | `codex/ci-02-backend-container` | `.github/workflows/backend-ci.yml`, Docker build files | BE-02 | pnpm frozen install; typecheck; tests; build; container health/safety checks |
 | IOS-01 | iOS | Xcode/SwiftUI skeleton и environments | Antigravity | DONE | `antigravity/ios-ios-01-skeleton` | `apps/ios/RealtimeTranslator` | SETUP-01, ADR-01 | build on simulator/device |
 | UX-01 | iOS | Core screens и обязательные UI states | Antigravity | DONE | `antigravity/ios-ux-01-screens` | `apps/ios/RealtimeTranslator/RealtimeTranslator/TranslationUI/` | IOS-01 | previews + UI state tests |
 | IOS-02 | iOS | BackendClient DTO + mock implementation | Antigravity | DONE | `antigravity/ios-ios-02-backendclient` / PR #3 | iOS client layer | API-01 | Review findings closed; PR-wide diff clean; macOS build/XCTest green |
@@ -225,6 +226,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 12:26 +05:00 | Codex | CI-02 start | Создан отдельный worktree от `main`; зарезервированы backend CI и Docker files | `origin/main` = `32b5964`; Codex/Antigravity worktrees физически разделены | Реализовать frozen-install/typecheck/test/build workflow и production container; затем draft PR/review |
 | 2026-07-14 11:50 +05:00 | Codex | IOS-03 simulator acceptance complete | Corrected WebRTC binary package resolved and compiled on macOS; IOS-03 marked DONE for CI/simulator scope | Actions run `29312358490`: package resolve, Xcode 16.4 build and XCTest success | Merge PR #4 after final exact-head check; deploy BE-02 to stage; run physical iPhone E2E separately |
 | 2026-07-14 11:45 +05:00 | Codex | IOS-03 CI dependency fix | WebRTC SPM URL corrected from source-only `webrtc-sdk/WebRTC` to binary package `stasel/WebRTC`; version stays `125.0.0` | Run `29312118786` failed before build: no matching package version; tag `125.0.0` verified in replacement repository | Push focused fix; rerun XcodeGen, simulator build and XCTest; physical iPhone remains open |
 | 2026-07-14 11:40 +05:00 | Codex | IOS-02 merged / IOS-03 retargeted | Последний macOS CI PR #3 green; PR #3 merged as `194ec0e`; PR #4 base changed to `main`, `origin/main` merged cleanly | Actions run `29311548132`: XcodeGen, build, XCTest success; PR #4 diff check clean | Push synced PR #4; require its own green macOS CI before merge; physical iPhone remains open |

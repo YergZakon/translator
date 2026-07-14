@@ -27,3 +27,23 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+## Production container
+
+Build from the repository root so the workspace lockfile is available:
+
+```powershell
+docker build --file apps/backend/Dockerfile --tag translator-backend:local .
+```
+
+Runtime secrets are required when the container starts and are never copied into the image:
+
+```powershell
+docker run --rm -p 3000:3000 `
+  -e APP_TOKENS="replace-with-a-random-prototype-app-token" `
+  -e SAFETY_IDENTIFIER_SECRET="replace-with-at-least-32-random-characters" `
+  -e OPENAI_API_KEY="server-side-key-from-secret-manager" `
+  translator-backend:local
+```
+
+The image runs as the unprivileged `node` user and includes a health check for `GET /v1/health`.

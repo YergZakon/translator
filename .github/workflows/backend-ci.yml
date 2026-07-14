@@ -1,0 +1,115 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/backend/**"
+      - "contracts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".dockerignore"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/backend/**"
+      - "contracts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".dockerignore"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test, build, and container smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build production output
+        run: pnpm build
+
+      - name: Scan tracked files for OpenAI key patterns
+        shell: bash
+        run: |
+          if git grep -I -n -E 'sk-(proj-)?[A-Za-z0-9_-]{20,}' -- . ':!pnpm-lock.yaml'; then
+            echo "Possible OpenAI API key found in a tracked file" >&2
+            exit 1
+          fi
+
+      - name: Build production container
+        run: docker build --file apps/backend/Dockerfile --tag translator-backend:ci .
+
+      - name: Verify container policy
+        shell: bash
+        run: |
+          test "$(docker inspect --format '{{.Config.User}}' translator-backend:ci)" = "node"
+          if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' translator-backend:ci \
+            | grep -Eq '^(APP_TOKENS|SAFETY_IDENTIFIER_SECRET|OPENAI_API_KEY)='; then
+            echo "Runtime secret name was baked into the image environment" >&2
+            exit 1
+          fi
+
+      - name: Start container
+        run: >-
+          docker run --detach --name translator-backend-ci
+          --publish 127.0.0.1:3000:3000
+          --env HOST=0.0.0.0
+          --env PORT=3000
+          --env LOG_LEVEL=warn
+          --env APP_TOKENS=ci-prototype-app-token
+          --env SAFETY_IDENTIFIER_SECRET=ci-safety-identifier-secret-32-characters
+          --env OPENAI_API_KEY=ci-placeholder-not-a-real-key
+          translator-backend:ci
+
+      - name: Smoke test health endpoint
+        shell: bash
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/v1/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs translator-backend-ci
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker rm --force translator-backend-ci || true
