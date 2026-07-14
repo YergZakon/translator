@@ -53,6 +53,7 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
         // Add Audio Track
         let audioSource = Self.factory.audioSource(with: nil)
         let audioTrack = Self.factory.audioTrack(with: audioSource, trackId: "audio0")
+        audioTrack.isEnabled = false
         self.localAudioTrack = audioTrack
         pc.add(audioTrack, streamIds: ["stream0"])
         
@@ -71,6 +72,9 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
         // Send to Server
         let answer = try await sendOfferToServer(offer: offer)
         try await setRemoteDescription(answer, for: pc)
+        
+        // Ensure remote output is initially disabled until state machine enables it
+        await setOutputEnabled(false)
     }
     
     func setMicrophoneEnabled(_ enabled: Bool) async {
@@ -91,10 +95,22 @@ class OpenAITranslationLeg: NSObject, TranslationLeg {
     }
     
     func close(reason: CloseReason) async {
+        diagnostics.log("OpenAITranslationLeg: Closing with reason \(reason). Draining events...")
+        
+        // Send a client event to close the session gracefully if needed,
+        // and allow some time for remaining transcript deltas to arrive.
+        if let dc = dataChannel, dc.readyState == .open {
+            let closeEvent = "{\"type\": \"session.close\"}"
+            if let data = closeEvent.data(using: .utf8) {
+                dc.sendData(RTCDataBuffer(data: data, isBinary: false))
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms drain
+        }
+        
         dataChannel?.close()
         peerConnection?.close()
         continuation?.finish()
-        diagnostics.log("OpenAITranslationLeg: Closed with reason \(reason)")
+        diagnostics.log("OpenAITranslationLeg: Closed")
     }
     
     // MARK: - SDP Helpers

@@ -8,12 +8,12 @@ struct DataChannelEvent: Codable {
 struct TranscriptDeltaEvent: Codable {
     let type: String // "session.output_transcript.delta" or "session.input_transcript.delta"
     let delta: String
-    let itemId: String
+    let itemId: String?
 }
 
 struct TranscriptDoneEvent: Codable {
     let type: String
-    let itemId: String
+    let itemId: String?
 }
 
 class EventDecoder {
@@ -30,7 +30,7 @@ class EventDecoder {
         case "response.audio_transcript.delta", "session.output_transcript.delta", "session.input_transcript.delta":
             if let deltaEvent = try? decoder.decode(TranscriptDeltaEvent.self, from: data) {
                 let segment = TranscriptSegment(
-                    id: deltaEvent.itemId,
+                    id: deltaEvent.itemId ?? UUID().uuidString,
                     text: deltaEvent.delta,
                     timestamp: Date(),
                     side: side,
@@ -38,10 +38,10 @@ class EventDecoder {
                 )
                 return .transcriptDelta(segment)
             }
-        case "response.audio_transcript.done", "session.output_transcript.done":
+        case "response.audio_transcript.done", "session.output_transcript.done", "session.input_transcript.done":
             if let doneEvent = try? decoder.decode(TranscriptDoneEvent.self, from: data) {
                 let segment = TranscriptSegment(
-                    id: doneEvent.itemId,
+                    id: doneEvent.itemId ?? UUID().uuidString,
                     text: "",
                     timestamp: Date(),
                     side: side,
