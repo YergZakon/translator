@@ -7,7 +7,7 @@ protocol SessionAPI {
 }
 
 protocol ConfigAPI {
-    // func getConfig(...) async throws -> AppConfig
+    func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse
 }
 
 protocol FeedbackAPI {
@@ -23,13 +23,59 @@ enum BackendError: Error {
 
 class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
     
+    private var lastETag = "etag_v1"
+    var isTokenValid = true // Can be toggled for testing 401
+    
+    private func newTraceId() -> String {
+        return "tr_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+    }
+    
+    private func newSessionId() -> String {
+        return "ts_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+    }
+    
+    private func newLegId() -> String {
+        return "leg_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+    }
+    
+    func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse {
+        try await Task.sleep(nanoseconds: 500_000_000)
+        
+        if !isTokenValid {
+            throw BackendError.serverError(AppError(code: .INVALID_APP_TOKEN, message: "Invalid app token", retryable: false, retryAfterMs: nil, traceId: newTraceId()))
+        }
+        
+        if etag == lastETag {
+            return ConfigResponse(etag: lastETag, config: nil, isNotModified: true)
+        }
+        
+        let config = AppConfig(
+            version: "2026-07-14.1",
+            killSwitch: false,
+            killSwitchMessage: nil,
+            modelAlias: "gpt-realtime-translate",
+            allowedModes: [.oneWayRuToEn, .dialogue],
+            allowedTargetLanguages: [.ru, .en],
+            maxDurationSeconds: 1800,
+            reconnectPolicy: ReconnectPolicy(maxAttempts: 3, backoffMs: [500, 1500, 3000], disconnectedGraceMs: 2000),
+            outputInterruption: OutputInterruptionConfig(mode: .duckAndSwitch, delayMs: 300),
+            telemetrySampleRate: 1.0,
+            experiments: [:]
+        )
+        return ConfigResponse(etag: lastETag, config: config, isNotModified: false)
+    }
+    
     func createSession(request: CreateTranslationSessionRequest) async throws -> CreateSessionResponse {
         // Simulate network latency
         try await Task.sleep(nanoseconds: 1_200_000_000)
         
+        if !isTokenValid {
+            throw BackendError.serverError(AppError(code: .INVALID_APP_TOKEN, message: "Invalid app token", retryable: false, retryAfterMs: nil, traceId: newTraceId()))
+        }
+        
         let legs = request.legs.map { reqLeg in
             TranslationLegCredentials(
-                legId: "leg_" + UUID().uuidString.prefix(12).lowercased(),
+                legId: newLegId(),
                 clientLegId: reqLeg.clientLegId,
                 targetLanguage: reqLeg.targetLanguage,
                 provider: .openai,
@@ -41,8 +87,8 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
         }
         
         let response = CreateSessionResponse(
-            sessionId: "ts_" + UUID().uuidString.prefix(12).lowercased(),
-            traceId: "tr_" + UUID().uuidString.prefix(12).lowercased(),
+            sessionId: newSessionId(),
+            traceId: newTraceId(),
             expiresAt: "2026-07-14T10:05:00Z",
             maxDurationSeconds: 1800,
             legs: legs,

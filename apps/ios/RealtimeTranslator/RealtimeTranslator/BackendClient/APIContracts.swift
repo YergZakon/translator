@@ -11,18 +11,50 @@ struct DeviceInfo: Codable {
     let modelClass: String
 }
 
+// MARK: - AppConfig
+struct ReconnectPolicy: Decodable {
+    let maxAttempts: Int
+    let backoffMs: [Int]
+    let disconnectedGraceMs: Int
+}
+
+struct OutputInterruptionConfig: Decodable {
+    let mode: OutputInterruptionPolicy
+    let delayMs: Int
+}
+
+struct AppConfig: Decodable {
+    let version: String
+    let killSwitch: Bool
+    let killSwitchMessage: String?
+    let modelAlias: String
+    let allowedModes: [TranslationMode]
+    let allowedTargetLanguages: [TargetLanguage]
+    let maxDurationSeconds: Int
+    let reconnectPolicy: ReconnectPolicy
+    let outputInterruption: OutputInterruptionConfig
+    let telemetrySampleRate: Double
+    let experiments: [String: String]
+}
+
+struct ConfigResponse {
+    let etag: String?
+    let config: AppConfig?
+    let isNotModified: Bool
+}
+
 // MARK: - Create Session Request
 enum TargetLanguage: String, Codable {
     case ru = "ru"
     case en = "en"
 }
 
-struct TranslationLegRequest: Codable {
+struct TranslationLegRequest: Encodable {
     let clientLegId: String
     let targetLanguage: TargetLanguage
 }
 
-struct CreateTranslationSessionRequest: Codable {
+struct CreateTranslationSessionRequest: Encodable {
     let mode: TranslationMode
     let sourceLocaleHint: String?
     let legs: [TranslationLegRequest]
@@ -31,11 +63,17 @@ struct CreateTranslationSessionRequest: Codable {
 }
 
 // MARK: - Create Session Response
-enum ProviderType: String, Codable {
+enum ProviderType: String, Decodable {
     case openai = "openai"
 }
 
-struct TranslationLegCredentials: Codable {
+enum OutputInterruptionPolicy: String, Decodable {
+    case finishCurrent = "finish_current"
+    case duckAndSwitch = "duck_and_switch"
+    case hardCut = "hard_cut"
+}
+
+struct TranslationLegCredentials: Decodable, CustomStringConvertible, CustomDebugStringConvertible {
     let legId: String
     let clientLegId: String
     let targetLanguage: TargetLanguage
@@ -44,15 +82,15 @@ struct TranslationLegCredentials: Codable {
     let clientSecret: String
     let expiresAt: String
     let callsUrl: String
+    
+    // Do not log clientSecret
+    var description: String {
+        "TranslationLegCredentials(legId: \(legId), clientLegId: \(clientLegId), secret: ***)"
+    }
+    var debugDescription: String { description }
 }
 
-enum OutputInterruptionPolicy: String, Codable {
-    case finishCurrent = "finish_current"
-    case duckAndSwitch = "duck_and_switch"
-    case hardCut = "hard_cut"
-}
-
-struct SessionPolicy: Codable {
+struct SessionPolicy: Decodable {
     let maxReconnectAttempts: Int
     let reconnectBackoffMs: [Int]
     let outputInterruption: OutputInterruptionPolicy
@@ -60,7 +98,7 @@ struct SessionPolicy: Codable {
     let telemetrySampleRate: Double
 }
 
-struct CreateSessionResponse: Codable {
+struct CreateSessionResponse: Decodable {
     let sessionId: String
     let traceId: String
     let expiresAt: String
@@ -70,7 +108,7 @@ struct CreateSessionResponse: Codable {
 }
 
 // MARK: - Error Response
-enum AppErrorCode: String, Codable {
+enum AppErrorCode: String, Decodable {
     case INVALID_REQUEST
     case INVALID_APP_TOKEN
     case INSTALLATION_FORBIDDEN
@@ -88,7 +126,7 @@ enum AppErrorCode: String, Codable {
     case INTERNAL_ERROR
 }
 
-struct AppError: Codable {
+struct AppError: Decodable {
     let code: AppErrorCode
     let message: String
     let retryable: Bool
@@ -96,6 +134,6 @@ struct AppError: Codable {
     let traceId: String
 }
 
-struct ErrorEnvelope: Codable {
+struct ErrorEnvelope: Decodable {
     let error: AppError
 }
