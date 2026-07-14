@@ -3,12 +3,12 @@ import SwiftUI
 struct DiagnosticsView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.presentationMode) var presentationMode
-    
+
     var body: some View {
         NavigationView {
             ZStack {
                 Color(.systemGroupedBackground).ignoresSafeArea()
-                
+
                 List {
                     Section(header: Text("Параметры Окружения")) {
                         HStack {
@@ -27,7 +27,7 @@ struct DiagnosticsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+
                     Section(header: Text("Состояние Устройства")) {
                         HStack {
                             Text("Аудиовыход")
@@ -42,7 +42,7 @@ struct DiagnosticsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+
                     Section(header: Text("Логи Событий WebRTC (P0)")) {
                         if container.diagnosticsStore.logs.isEmpty {
                             Text("Нет записанных логов.")

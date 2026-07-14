@@ -10,7 +10,7 @@ struct LiveView: View {
     @State private var showFeedback = false
     @State private var sessionDuration: TimeInterval = 0
     @State private var timerSubscription: Timer? = nil
-    
+
     var body: some View {
         VStack(spacing: 0) {
             if !isPreflightPassed {
@@ -24,18 +24,18 @@ struct LiveView: View {
                             .frame(width: 10, height: 10)
                             .scaleEffect(isPulsing ? 1.3 : 1.0)
                             .animation(isPulsing ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: isPulsing)
-                        
+
                         Text(sessionStore.state.displayName)
                             .font(.system(.subheadline, design: .rounded))
                             .fontWeight(.medium)
                             .foregroundColor(.primary)
-                        
+
                         Spacer()
-                        
+
                         Text(formatDuration(sessionDuration))
                             .font(.system(.footnote, design: .monospaced))
                             .foregroundColor(.secondary)
-                        
+
                         Button(action: {
                             sessionStore.setMute(!sessionStore.isMuted)
                         }) {
@@ -50,7 +50,7 @@ struct LiveView: View {
                     }
                     .padding()
                     .background(Color(.systemBackground))
-                    
+
                     // Subtitles feed area
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -100,7 +100,7 @@ struct LiveView: View {
                         }
                     }
                     .background(Color(.secondarySystemBackground).opacity(0.5))
-                    
+
                     // Volume Level wave meter
                     if isListeningOrTranslating {
                         HStack(spacing: 3) {
@@ -114,7 +114,7 @@ struct LiveView: View {
                         .padding(.vertical, 8)
                         .animation(.spring(response: 0.15, dampingFraction: 0.4), value: volumeLevels)
                     }
-                    
+
                     // Controls Area
                     VStack(spacing: 16) {
                         if mode == .dialogue {
@@ -140,7 +140,7 @@ struct LiveView: View {
                                     )
                                 }
                                 .accessibilityLabel("Активировать сторону Я говорю по-русски")
-                                
+
                                 Button(action: {
                                     sessionStore.switchSide(to: .englishSpeaker)
                                 }) {
@@ -182,7 +182,7 @@ struct LiveView: View {
                             .padding(.horizontal)
                             .accessibilityLabel("Начать запись русской речи")
                         }
-                        
+
                         // Stop button (minimum 48pt target)
                         Button(action: stopSession) {
                             Text("Завершить разговор")
@@ -212,7 +212,7 @@ struct LiveView: View {
             ResultView(duration: sessionDuration)
         }
     }
-    
+
     private var statusColor: Color {
         switch sessionStore.state {
         case .idle: return .gray
@@ -226,52 +226,52 @@ struct LiveView: View {
         case .ending: return .gray
         }
     }
-    
+
     private var isPulsing: Bool {
         switch sessionStore.state {
         case .listening, .translating, .reconnecting: return true
         default: return false
         }
     }
-    
+
     private var isListeningOrTranslating: Bool {
         switch sessionStore.state {
         case .listening, .translating: return true
         default: return false
         }
     }
-    
+
     private func startLiveSession() {
         Task {
             await sessionStore.startSession(mode: mode)
-            
+
             // Timer for duration
             timerSubscription = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 sessionDuration += 1
             }
-            
+
             // Start mock audio wave and text deltas
             var counter = 0
             mockTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { _ in
                 counter += 1
-                
+
                 // Simulating audio levels
                 if isListeningOrTranslating {
                     for i in 0..<volumeLevels.count {
                         volumeLevels[i] = CGFloat.random(in: 0.1...0.8)
                     }
                 }
-                
+
                 let side: Side = (mode == .dialogue && counter % 2 == 0) ? .englishSpeaker : .russianSpeaker
                 let text = side == .russianSpeaker ? "Какая будет погода сегодня? " : "It should be sunny and warm. "
                 let segId = "seg_\(counter)"
-                
+
                 sessionStore.appendTranscriptDelta(id: segId, text: text, side: side, isFinal: false)
-                
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     sessionStore.appendTranscriptDelta(id: segId, text: side == .russianSpeaker ? "Пожалуйста, подскажите." : "Enjoy your day!", side: side, isFinal: true)
                     sessionStore.completeSegment(id: segId)
-                    
+
                     // Reset volume waves
                     for i in 0..<volumeLevels.count {
                         volumeLevels[i] = 0.1
@@ -280,20 +280,20 @@ struct LiveView: View {
             }
         }
     }
-    
+
     private func stopSession() {
         cleanupTimers()
         sessionStore.stopSession()
         showFeedback = true
     }
-    
+
     private func cleanupTimers() {
         mockTimer?.invalidate()
         timerSubscription?.invalidate()
         mockTimer = nil
         timerSubscription = nil
     }
-    
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let mins = Int(duration) / 60
         let secs = Int(duration) % 60

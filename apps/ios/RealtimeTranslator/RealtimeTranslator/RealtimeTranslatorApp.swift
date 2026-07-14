@@ -4,7 +4,7 @@ import SwiftUI
 struct RealtimeTranslatorApp: App {
     @StateObject private var container = DependencyContainer.shared
     @AppStorage("isOnboardingCompleted") private var isOnboardingCompleted = false
-    
+
     var body: some Scene {
         WindowGroup {
             if isOnboardingCompleted {

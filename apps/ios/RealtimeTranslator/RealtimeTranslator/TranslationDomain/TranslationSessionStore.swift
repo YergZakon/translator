@@ -13,7 +13,7 @@ enum SessionState: Equatable {
     case reconnecting(attempt: Int)
     case error(code: String, message: String)
     case ending
-    
+
     var displayName: String {
         switch self {
         case .idle: return "Готово к запуску"
@@ -37,19 +37,19 @@ class TranslationSessionStore: ObservableObject {
     @Published private(set) var activeSide: Side = .russianSpeaker
     @Published private(set) var segments: [TranscriptSegment] = []
     @Published private(set) var isMuted: Bool = false
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+
     func startSession(mode: TranslationMode) async {
         state = .preparingAudio
-        
+
         // Simulating checking mic/speaker permissions
         do {
             try await Task.sleep(nanoseconds: 500_000_000)
-            
+
             state = .requestingSecret
             let api = DependencyContainer.shared.sessionAPI
-            
+
             let legs: [TranslationLegRequest]
             if mode == .dialogue {
                 legs = [
@@ -61,7 +61,7 @@ class TranslationSessionStore: ObservableObject {
                     TranslationLegRequest(clientLegId: "ru-to-en", targetLanguage: .en)
                 ]
             }
-            
+
             let request = CreateTranslationSessionRequest(
                 mode: mode,
                 sourceLocaleHint: "ru-RU",
@@ -69,10 +69,10 @@ class TranslationSessionStore: ObservableObject {
                 app: AppInfo(version: "0.1.0", build: 1),
                 device: DeviceInfo(osVersion: "18.0", modelClass: "phone")
             )
-            
+
             let response = try await api.createSession(request: request)
             print("Session created successfully with \(response.legs.count) legs.")
-            
+
             state = .negotiatingWebRTC
             try await Task.sleep(nanoseconds: 500_000_000)
             state = .ready
@@ -80,17 +80,17 @@ class TranslationSessionStore: ObservableObject {
             state = .error(code: "API_ERROR", message: error.localizedDescription)
         }
     }
-    
+
     func switchSide(to side: Side) {
         guard state == .ready || isListeningOrTranslating else { return }
         activeSide = side
         state = .listening(side: side)
     }
-    
+
     func setMute(_ muted: Bool) {
         isMuted = muted
     }
-    
+
     func appendTranscriptDelta(id: String, text: String, side: Side, isFinal: Bool) {
         if let idx = segments.firstIndex(where: { $0.id == id }) {
             segments[idx].text += text
@@ -104,14 +104,14 @@ class TranslationSessionStore: ObservableObject {
         }
         state = .translating(side: side)
     }
-    
+
     func completeSegment(id: String) {
         if let idx = segments.firstIndex(where: { $0.id == id }) {
             segments[idx].isFinal = true
         }
         state = .ready
     }
-    
+
     func stopSession() {
         state = .ending
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -119,11 +119,11 @@ class TranslationSessionStore: ObservableObject {
             self.segments.removeAll()
         }
     }
-    
+
     func reportError(code: String, message: String) {
         state = .error(code: code, message: message)
     }
-    
+
     private var isListeningOrTranslating: Bool {
         switch state {
         case .listening, .translating: return true

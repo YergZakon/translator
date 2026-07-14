@@ -6,7 +6,7 @@ struct ResultView: View {
     @State private var comment = ""
     @State private var selectedIssues: Set<String> = []
     @Environment(\.presentationMode) var presentationMode
-    
+
     let issueCategories = [
         "Плохой перевод",
         "Задержка звука",
@@ -14,33 +14,33 @@ struct ResultView: View {
         "Обрыв соединения",
         "Не распознана речь"
     ]
-    
+
     var body: some View {
         NavigationView {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
-                
+
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 56))
                             .foregroundColor(.green)
                             .padding(.top, 20)
-                        
+
                         Text("Спасибо за беседу!")
                             .font(.title2)
                             .fontWeight(.bold)
-                        
+
                         Text("Продолжительность: \(formatDuration(duration))")
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Divider()
-                    
+
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Оцените качество:")
                             .font(.headline)
-                        
+
                         HStack {
                             ForEach(1...5, id: \.self) { star in
                                 Image(systemName: star <= rating ? "star.fill" : "star")
@@ -55,23 +55,23 @@ struct ResultView: View {
                         }
                         .padding(.vertical, 8)
                     }
-                    
+
                     if rating > 0 && rating < 4 {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Что пошло не так?")
                                 .font(.headline)
-                            
+
                             FlowLayout(issues: issueCategories, selected: $selectedIssues)
                         }
                         .transition(.opacity)
                     }
-                    
+
                     TextField("Дополнительный отзыв...", text: $comment)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.vertical, 8)
-                    
+
                     Spacer()
-                    
+
                     Button(action: submitFeedback) {
                         Text("Готово")
                             .fontWeight(.bold)
@@ -90,11 +90,11 @@ struct ResultView: View {
             .navigationBarHidden(true)
         }
     }
-    
+
     private func submitFeedback() {
         presentationMode.wrappedValue.dismiss()
     }
-    
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let mins = Int(duration) / 60
         let secs = Int(duration) % 60
@@ -106,7 +106,7 @@ struct ResultView: View {
 struct FlowLayout: View {
     let issues: [String]
     @Binding var selected: Set<String>
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(issues, id: \.self) { issue in
