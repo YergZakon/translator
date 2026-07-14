@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0e0f13;font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#6d6dff;text-decoration:none}a:hover{color:#8a8aff}
+@keyframes wIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes puls{0%,100%{transform:scale(1);opacity:.95}50%{transform:scale(1.1);opacity:.55}}
+@keyframes rng{0%{transform:scale(.75);opacity:.6}100%{transform:scale(2.3);opacity:0}}
+@keyframes wv{0%,100%{transform:scaleY(.28)}50%{transform:scaleY(1)}}
+@keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes spn{to{transform:rotate(360deg)}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes popin{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
+::-webkit-scrollbar{width:0;height:0}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;width:100%;background:radial-gradient(120% 90% at 80% 0%,#1b1d27 0%,#0e0f13 55%,#08090c 100%)">
+
+  <!-- ======== DEV CONTROL DOCK ======== -->
+  <aside style="width:274px;flex:none;padding:22px 18px;background:#101218;border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7b7bff,#5142e6);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(90,66,230,.5)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 8h9M4 8l3-3M4 8l3 3" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16h-9M20 16l-3-3M20 16l-3 3" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div style="font:700 15px system-ui;color:#fff;letter-spacing:-.01em">EasyTalk</div>
+        <div style="font:600 9px system-ui;letter-spacing:.13em;color:rgba(255,255,255,.32);text-transform:uppercase">Prototype · Dev handoff</div>
+      </div>
+    </div>
+
+    <div style="font:700 10px system-ui;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:16px 0 7px">Экран</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <sc-for list="{{ screens }}" as="b" hint-placeholder-count="5">
+        <button style="{{ b.style }}" onClick="{{ b.onClick }}">{{ b.label }}</button>
+      </sc-for>
+    </div>
+
+    <div style="font:700 10px system-ui;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:16px 0 7px">Тема</div>
+    <div style="display:flex;gap:4px;background:rgba(255,255,255,.04);padding:4px;border-radius:12px">
+      <sc-for list="{{ themes }}" as="b" hint-placeholder-count="2"><button style="{{ b.style }}" onClick="{{ b.onClick }}">{{ b.label }}</button></sc-for>
+    </div>
+
+    <div style="font:700 10px system-ui;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:16px 0 7px">Язык интерфейса</div>
+    <div style="display:flex;gap:4px;background:rgba(255,255,255,.04);padding:4px;border-radius:12px">
+      <sc-for list="{{ langs }}" as="b" hint-placeholder-count="2"><button style="{{ b.style }}" onClick="{{ b.onClick }}">{{ b.label }}</button></sc-for>
+    </div>
+
+    <div style="font:700 10px system-ui;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:16px 0 7px">Транскрипт (Live)</div>
+    <div style="display:flex;gap:4px;background:rgba(255,255,255,.04);padding:4px;border-radius:12px">
+      <sc-for list="{{ transcripts }}" as="b" hint-placeholder-count="2"><button style="{{ b.style }}" onClick="{{ b.onClick }}">{{ b.label }}</button></sc-for>
+    </div>
+
+    <div style="font:700 10px system-ui;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:16px 0 7px">Состояние сессии</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <sc-for list="{{ states }}" as="b" hint-placeholder-count="4"><button style="{{ b.style }}" onClick="{{ b.onClick }}">{{ b.label }}</button></sc-for>
+    </div>
+    <button style="{{ netBtn.style }}" onClick="{{ netBtn.onClick }}">{{ netBtn.label }}</button>
+    <button onClick="{{ playDemo }}" style="margin-top:8px;padding:11px;border:none;border-radius:11px;background:linear-gradient(135deg,#7b7bff,#5142e6);color:#fff;font:700 13px system-ui;cursor:pointer;box-shadow:0 6px 18px rgba(81,66,230,.4)">▶  Демо-диалог</button>
+
+    <div style="margin-top:auto;padding-top:16px;font:500 10.5px/1.6 system-ui;color:rgba(255,255,255,.3)">Панель — только для прототипа. В приложении управление жестами и navigation bar.</div>
+  </aside>
+
+  <!-- ======== PHONE STAGE ======== -->
+  <main style="flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px;min-height:100vh">
+    <div style="position:relative;width:392px;height:820px;border-radius:56px;background:#000;padding:13px;box-shadow:0 0 0 2px #2a2c34, 0 40px 90px rgba(0,0,0,.6), inset 0 0 3px rgba(255,255,255,.2)">
+      <div style="{{ rootStyle }};position:relative;width:100%;height:100%;border-radius:44px;overflow:hidden;background:var(--bg);background-image:var(--grad)">
+
+        <!-- status bar -->
+        <div style="position:relative;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:16px 30px 0;height:54px">
+          <div style="font:600 15px system-ui;color:var(--fg);letter-spacing:.02em">9:41</div>
+          <div style="display:flex;gap:7px;align-items:center;color:var(--fg)">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="2" width="3" height="10" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2.5C10.8 2.5 12.9 3.4 14.4 4.9L15.8 3.4C13.9 1.5 11.3.4 8.5.4S3.1 1.5 1.2 3.4l1.4 1.5C4.1 3.4 6.2 2.5 8.5 2.5z" opacity=".9"/><path d="M8.5 6.1c1.3 0 2.5.5 3.4 1.4l1.4-1.5C11.9 4.7 10.3 4 8.5 4S5.1 4.7 3.7 6l1.4 1.5c.9-.9 2.1-1.4 3.4-1.4z"/><circle cx="8.5" cy="10" r="1.7"/></svg>
+            <div style="display:flex;align-items:center;gap:2px"><div style="width:23px;height:12px;border:1.5px solid var(--fg);border-radius:3px;opacity:.5;padding:1.5px"><div style="width:75%;height:100%;background:var(--fg);border-radius:1px"></div></div><div style="width:1.5px;height:4px;background:var(--fg);opacity:.5;border-radius:1px"></div></div>
+          </div>
+        </div>
+
+        <!-- dynamic island -->
+        <div style="{{ islandStyle }}">
+          <sc-if value="{{ islandActive }}" hint-placeholder-val="">
+            <div style="display:flex;align-items:center;gap:8px;padding:0 15px;height:100%">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--active);animation:blink 1.1s infinite"></span>
+              <span style="font:600 12px system-ui;color:#fff;white-space:nowrap">{{ islandLabel }}</span>
+              <div style="display:flex;gap:2px;align-items:center;height:14px;margin-left:2px">
+                <span style="width:2.5px;height:100%;background:var(--active);border-radius:2px;transform-origin:center;animation:wv .7s ease-in-out infinite"></span>
+                <span style="width:2.5px;height:100%;background:var(--active);border-radius:2px;transform-origin:center;animation:wv .7s ease-in-out .15s infinite"></span>
+                <span style="width:2.5px;height:100%;background:var(--active);border-radius:2px;transform-origin:center;animation:wv .7s ease-in-out .3s infinite"></span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- ============ SCREEN BODY ============ -->
+        <div style="position:absolute;inset:54px 0 0;display:flex;flex-direction:column">
+
+        <!-- ---- ONBOARDING ---- -->
+        <sc-if value="{{ isOnboarding }}" hint-placeholder-val="">
+          <div style="flex:1;overflow:auto;padding:14px 26px 30px;display:flex;flex-direction:column">
+            <div style="display:flex;flex-direction:column;align-items:center;text-align:center;margin-top:14px">
+              <div style="width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,#7b7bff,#5142e6);display:flex;align-items:center;justify-content:center;box-shadow:0 14px 34px rgba(90,66,230,.5);animation:floaty 3.4s ease-in-out infinite">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M4 8h9M4 8l3-3M4 8l3 3" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 16h-9M20 16l-3-3M20 16l-3 3" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div style="font:700 27px system-ui;color:var(--fg);margin-top:18px;letter-spacing:-.02em">EasyTalk</div>
+              <div style="font:600 17px system-ui;color:var(--fg);margin-top:12px;letter-spacing:-.01em">{{ t.onbTitle }}</div>
+              <div style="font:400 14px/1.45 system-ui;color:var(--fg2);margin-top:6px;max-width:270px">{{ t.onbSub }}</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:22px">
+              <div style="display:flex;gap:13px;align-items:center;padding:13px 15px;background:var(--card);border:1px solid var(--stroke);border-radius:16px;backdrop-filter:blur(20px)">
+                <div style="width:38px;height:38px;flex:none;border-radius:11px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M6 7v10M18 7v10M2 11v2M22 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+                <div><div style="font:600 14px system-ui;color:var(--fg)">{{ t.b1t }}</div><div style="font:400 12.5px/1.35 system-ui;color:var(--fg2);margin-top:2px">{{ t.b1s }}</div></div>
+              </div>
+              <div style="display:flex;gap:13px;align-items:center;padding:13px 15px;background:var(--card);border:1px solid var(--stroke);border-radius:16px;backdrop-filter:blur(20px)">
+                <div style="width:38px;height:38px;flex:none;border-radius:11px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="currentColor"/></svg></div>
+                <div><div style="font:600 14px system-ui;color:var(--fg)">{{ t.b2t }}</div><div style="font:400 12.5px/1.35 system-ui;color:var(--fg2);margin-top:2px">{{ t.b2s }}</div></div>
+              </div>
+              <div style="display:flex;gap:13px;align-items:center;padding:13px 15px;background:var(--card);border:1px solid var(--stroke);border-radius:16px;backdrop-filter:blur(20px)">
+                <div style="width:38px;height:38px;flex:none;border-radius:11px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+                <div><div style="font:600 14px system-ui;color:var(--fg)">{{ t.b3t }}</div><div style="font:400 12.5px/1.35 system-ui;color:var(--fg2);margin-top:2px">{{ t.b3s }}</div></div>
+              </div>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:22px 2px 9px">{{ t.permTitle }}</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--card);border:1px solid var(--stroke);border-radius:16px">
+                <div style="width:36px;height:36px;flex:none;border-radius:10px;background:rgba(255,59,48,.14);display:flex;align-items:center;justify-content:center;color:#ff453a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="12" rx="3" fill="currentColor"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3M9 20h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                <div style="flex:1"><div style="display:flex;align-items:center;gap:6px"><span style="font:600 14px system-ui;color:var(--fg)">{{ t.micPerm }}</span><span style="font:700 9px system-ui;color:#ff453a;background:rgba(255,59,48,.15);padding:2px 6px;border-radius:5px">{{ t.critical }}</span></div><div style="font:400 12px system-ui;color:var(--fg2);margin-top:1px">{{ t.micPermSub }}</div></div>
+                <button onClick="{{ grantMic }}" style="{{ micBtn.style }}">{{ micBtn.label }}</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--card);border:1px solid var(--stroke);border-radius:16px">
+                <div style="width:36px;height:36px;flex:none;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor"/><path d="M16 8a5 5 0 0 1 0 8M18.5 5.5a9 9 0 0 1 0 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                <div style="flex:1"><div style="font:600 14px system-ui;color:var(--fg)">{{ t.speechPerm }}</div><div style="font:400 12px system-ui;color:var(--fg2);margin-top:1px">{{ t.speechPermSub }}</div></div>
+                <button onClick="{{ grantSpeech }}" style="{{ speechBtn.style }}">{{ speechBtn.label }}</button>
+              </div>
+            </div>
+
+            <sc-if value="{{ micDenied }}" hint-placeholder-val="">
+              <div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:12px 14px;background:rgba(255,59,48,.1);border:1px solid rgba(255,59,48,.3);border-radius:14px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:1px"><path d="M12 3 2 20h20L12 3z" stroke="#ff453a" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5M12 17h.01" stroke="#ff453a" stroke-width="2" stroke-linecap="round"/></svg>
+                <div style="font:500 12.5px/1.4 system-ui;color:var(--fg)">{{ t.micError }}</div>
+              </div>
+            </sc-if>
+
+            <button onClick="{{ finishOnboarding }}" style="{{ contBtn }}">{{ t.continue }}</button>
+          </div>
+        </sc-if>
+
+        <!-- ---- HOME ---- -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="">
+          <div style="flex:1;overflow:auto;padding:8px 26px 26px;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+              <div><div style="font:400 14px system-ui;color:var(--fg2)">{{ t.hello }}</div><div style="font:700 26px system-ui;color:var(--fg);letter-spacing:-.02em;margin-top:1px">{{ t.homeTitle }}</div></div>
+              <button onClick="{{ goSettings }}" style="width:42px;height:42px;border-radius:13px;background:var(--card);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M21.5 12h-3M5.5 12h-3M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1M18.7 18.7l-2.1-2.1M7.4 7.4 5.3 5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:24px 2px 10px">{{ t.modeTitle }}</div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <button onClick="{{ setModeDialogue }}" style="{{ modeDlgStyle }}">
+                <div style="display:flex;align-items:center;gap:13px"><div style="width:44px;height:44px;border-radius:13px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M4 5h11a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8l-4 3V5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M20 19H9l-2 1.5V13" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" opacity=".5"/></svg></div><div style="text-align:left"><div style="font:600 16px system-ui;color:var(--fg)">{{ t.modeDialogue }}</div><div style="font:400 12.5px system-ui;color:var(--fg2);margin-top:2px">{{ t.modeDialogueSub }}</div></div></div>
+                <div style="{{ modeDlgDot }}"></div>
+              </button>
+              <button onClick="{{ setModeMono }}" style="{{ modeMonoStyle }}">
+                <div style="display:flex;align-items:center;gap:13px"><div style="width:44px;height:44px;border-radius:13px;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M4 12h13M17 12l-4-4M17 12l-4 4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="text-align:left"><div style="font:600 16px system-ui;color:var(--fg)">{{ t.modeMono }}</div><div style="font:400 12.5px system-ui;color:var(--fg2);margin-top:2px">{{ t.modeMonoSub }}</div></div></div>
+                <div style="{{ modeMonoDot }}"></div>
+              </button>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:24px 2px 10px">{{ t.langTitle }}</div>
+            <div style="display:flex;align-items:center;gap:11px;padding:16px;background:var(--card);border:1px solid var(--stroke);border-radius:18px">
+              <div style="flex:1;text-align:center"><div style="font:700 22px system-ui;color:#0A84FF">RU</div><div style="font:500 12px system-ui;color:var(--fg2);margin-top:2px">Русский</div></div>
+              <button onClick="{{ swapLangs }}" style="width:40px;height:40px;flex:none;border-radius:12px;background:var(--card2);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M7 4 4 7l3 3M4 7h11M17 20l3-3-3-3M20 17H9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <div style="flex:1;text-align:center"><div style="font:700 22px system-ui;color:#30D158">EN</div><div style="font:500 12px system-ui;color:var(--fg2);margin-top:2px">English</div></div>
+            </div>
+
+            <button onClick="{{ startSession }}" style="margin-top:auto;padding:18px;border:none;border-radius:20px;background:linear-gradient(135deg,#7b7bff,#5142e6);color:#fff;font:700 17px system-ui;cursor:pointer;box-shadow:0 12px 32px rgba(81,66,230,.45);display:flex;align-items:center;justify-content:center;gap:9px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#fff"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>
+              {{ t.startBtn }}
+            </button>
+          </div>
+        </sc-if>
+
+        <!-- ---- LIVE ---- -->
+        <sc-if value="{{ isLive }}" hint-placeholder-val="">
+          <div style="flex:1;display:flex;flex-direction:column;min-height:0">
+            <!-- status strip -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 22px 10px">
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 13px;background:var(--card);border:1px solid var(--stroke);border-radius:30px;backdrop-filter:blur(18px)">
+                <span style="width:9px;height:9px;border-radius:50%;background:{{ statusColor }};box-shadow:0 0 8px {{ statusColor }}"></span>
+                <span style="font:600 13px system-ui;color:var(--fg)">{{ statusLabel }}</span>
+              </div>
+              <sc-if value="{{ degraded }}" hint-placeholder-val="">
+                <div style="display:flex;align-items:center;gap:6px;padding:6px 11px;background:rgba(255,159,10,.16);border:1px solid rgba(255,159,10,.4);border-radius:30px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3 2 20h20L12 3z" stroke="#ff9f0a" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5M12 17h.01" stroke="#ff9f0a" stroke-width="2.2" stroke-linecap="round"/></svg>
+                  <span style="font:600 12px system-ui;color:#ff9f0a">{{ t.degraded }}</span>
+                </div>
+              </sc-if>
+            </div>
+
+            <!-- hero (empty) OR transcript -->
+            <sc-if value="{{ showHero }}" hint-placeholder-val="">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 34px;text-align:center">
+                <sc-if value="{{ stConnecting }}" hint-placeholder-val="">
+                  <div style="position:relative;width:72px;height:72px;margin-bottom:26px">
+                    <div style="position:absolute;inset:0;border-radius:50%;border:3px solid var(--stroke);border-top-color:var(--accent);animation:spn .9s linear infinite"></div>
+                  </div>
+                  <div style="font:600 19px system-ui;color:var(--fg);letter-spacing:-.01em">{{ t.connecting }}</div>
+                  <div style="font:400 14px/1.45 system-ui;color:var(--fg2);margin-top:8px;max-width:250px">{{ t.connectingSub }}</div>
+                </sc-if>
+                <sc-if value="{{ stReadyHero }}" hint-placeholder-val="">
+                  <div style="position:relative;width:118px;height:118px;display:flex;align-items:center;justify-content:center;margin-bottom:28px">
+                    <div style="position:absolute;inset:0;border-radius:50%;background:var(--active);opacity:.18;animation:rng 2.2s ease-out infinite"></div>
+                    <div style="position:absolute;inset:14px;border-radius:50%;background:var(--active);opacity:.2;animation:rng 2.2s ease-out .6s infinite"></div>
+                    <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#7b7bff,#5142e6);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(81,66,230,.5)"><svg width="34" height="34" viewBox="0 0 24 24" fill="none"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#fff"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg></div>
+                  </div>
+                  <div style="font:600 20px system-ui;color:var(--fg);letter-spacing:-.01em">{{ t.ready }}</div>
+                  <div style="font:400 14px/1.45 system-ui;color:var(--fg2);margin-top:8px;max-width:250px">{{ t.readySub }}</div>
+                </sc-if>
+                <sc-if value="{{ stListenHero }}" hint-placeholder-val="">
+                  <div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:26px">
+                    <span style="width:8px;height:70%;background:var(--active);border-radius:5px;transform-origin:bottom;animation:wv .9s ease-in-out infinite"></span>
+                    <span style="width:8px;height:100%;background:var(--active);border-radius:5px;transform-origin:bottom;animation:wv .9s ease-in-out .12s infinite"></span>
+                    <span style="width:8px;height:55%;background:var(--active);border-radius:5px;transform-origin:bottom;animation:wv .9s ease-in-out .24s infinite"></span>
+                    <span style="width:8px;height:90%;background:var(--active);border-radius:5px;transform-origin:bottom;animation:wv .9s ease-in-out .36s infinite"></span>
+                    <span style="width:8px;height:45%;background:var(--active);border-radius:5px;transform-origin:bottom;animation:wv .9s ease-in-out .48s infinite"></span>
+                  </div>
+                  <div style="font:600 19px system-ui;color:var(--fg)">{{ t.listening }}</div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showTranscript }}" hint-placeholder-val="">
+              <!-- BUBBLES -->
+              <sc-if value="{{ isBubbles }}" hint-placeholder-val="">
+                <div style="flex:1;overflow:auto;padding:6px 20px 12px;display:flex;flex-direction:column;gap:11px">
+                  <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="2">
+                    <div style="display:flex;justify-content:{{ m.justify }};animation:popin .35s ease both">
+                      <div style="{{ m.bubbleStyle }}">
+                        <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px"><span style="{{ m.chipStyle }}">{{ m.chip }}</span><span style="font:500 10.5px system-ui;color:var(--fg3)">{{ m.role }}</span></div>
+                        <div style="font:400 13px/1.4 system-ui;color:var(--fg2);margin-bottom:5px"><sc-for list="{{ m.origWords }}" as="w" hint-placeholder-count="0"><span style="display:inline-block;margin-right:.28em;animation:wIn .3s ease both">{{ w }}</span></sc-for></div>
+                        <div style="height:1px;background:var(--stroke);margin:2px 0 6px"></div>
+                        <div style="font:600 16px/1.42 system-ui;color:var(--fg)"><sc-for list="{{ m.transWords }}" as="w" hint-placeholder-count="0"><span style="display:inline-block;margin-right:.28em;animation:wIn .3s ease both">{{ w }}</span></sc-for></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ stTranslating }}" hint-placeholder-val="">
+                    <div style="display:flex;justify-content:{{ activeJustify }}"><div style="max-width:78%;background:var(--card);border:1px solid var(--stroke);border-radius:20px;padding:13px 15px;display:flex;flex-direction:column;gap:8px"><div style="width:150px;height:11px;border-radius:6px;background:linear-gradient(90deg,var(--card) 25%,var(--card2) 37%,var(--card) 63%);background-size:200% 100%;animation:shim 1.3s infinite"></div><div style="width:96px;height:11px;border-radius:6px;background:linear-gradient(90deg,var(--card) 25%,var(--card2) 37%,var(--card) 63%);background-size:200% 100%;animation:shim 1.3s infinite"></div></div></div>
+                  </sc-if>
+                </div>
+              </sc-if>
+              <!-- TELEPROMPTER -->
+              <sc-if value="{{ isTele }}" hint-placeholder-val="">
+                <div style="flex:1;overflow:auto;padding:14px 28px;display:flex;flex-direction:column;justify-content:flex-end;gap:20px">
+                  <sc-for list="{{ teleHistory }}" as="m" hint-placeholder-count="1">
+                    <div style="opacity:.4"><div style="font:600 13px system-ui;color:{{ m.col }};margin-bottom:4px">{{ m.chip }}</div><div style="font:600 20px/1.3 system-ui;color:var(--fg)">{{ m.trans }}</div></div>
+                  </sc-for>
+                  <sc-if value="{{ hasCurrent }}" hint-placeholder-val="">
+                    <div>
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="width:26px;height:3px;border-radius:2px;background:{{ current.col }}"></span><span style="font:700 13px system-ui;color:{{ current.col }}">{{ current.chip }}</span></div>
+                      <div style="font:400 15px/1.4 system-ui;color:var(--fg3);margin-bottom:10px"><sc-for list="{{ current.origWords }}" as="w" hint-placeholder-count="0"><span style="display:inline-block;margin-right:.28em">{{ w }}</span></sc-for></div>
+                      <div style="font:700 30px/1.24 system-ui;color:var(--fg);letter-spacing:-.01em"><sc-for list="{{ current.transWords }}" as="w" hint-placeholder-count="0"><span style="display:inline-block;margin-right:.26em;animation:wIn .32s ease both">{{ w }}</span></sc-for><sc-if value="{{ stTranslating }}" hint-placeholder-val=""><span style="display:inline-block;width:3px;height:28px;background:var(--accent);vertical-align:-4px;animation:blink .8s infinite"></span></sc-if></div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </sc-if>
+
+            <!-- controls -->
+            <div style="padding:14px 24px calc(14px + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-around;background:var(--bar);border-top:1px solid var(--stroke);backdrop-filter:blur(24px)">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <button onClick="{{ switchSpeaker }}" style="width:54px;height:54px;border-radius:50%;background:var(--card2);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 4 4 7l3 3M4 7h11M17 20l3-3-3-3M20 17H9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                <span style="font:500 10.5px system-ui;color:var(--fg2)">{{ t.switch }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <button onClick="{{ toggleMute }}" style="{{ micToggleStyle }}">
+                  <sc-if value="{{ muted }}" hint-placeholder-val=""><svg width="28" height="28" viewBox="0 0 24 24" fill="none" style="color:var(--fg)"><path d="M9 9v2a3 3 0 0 0 4.5 2.6M15 11V5a3 3 0 0 0-5.9-.7M5 11a7 7 0 0 0 10.4 6.1M12 18.5V21M4 4l16 16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></sc-if>
+                  <sc-if value="{{ notMuted }}" hint-placeholder-val=""><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#fff"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg></sc-if>
+                </button>
+                <span style="font:500 10.5px system-ui;color:var(--fg2)">{{ micToggleLabel }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                <button onClick="{{ endSession }}" style="width:54px;height:54px;border-radius:50%;background:#ff453a;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 20px rgba(255,69,58,.4)"><svg width="25" height="25" viewBox="0 0 24 24" fill="none"><path d="M3 10c5-4 13-4 18 0 1 .8.8 2.2-.2 2.8l-2.5 1.4c-.8.5-1.8.2-2.3-.6l-.9-1.6c-2-.8-4.2-.8-6.2 0l-.9 1.6c-.5.8-1.5 1.1-2.3.6L3.2 12.8C2.2 12.2 2 10.8 3 10z" fill="#fff"/></svg></button>
+                <span style="font:500 10.5px system-ui;color:var(--fg2)">{{ t.end }}</span>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ---- RESULT ---- -->
+        <sc-if value="{{ isResult }}" hint-placeholder-val="">
+          <div style="flex:1;overflow:auto;padding:8px 24px 26px;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+              <div style="font:700 24px system-ui;color:var(--fg);letter-spacing:-.02em">{{ t.resultTitle }}</div>
+              <button onClick="{{ backHome }}" style="width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+            </div>
+            <div style="display:flex;gap:9px;margin-top:16px">
+              <div style="flex:1;padding:13px;background:var(--card);border:1px solid var(--stroke);border-radius:15px;text-align:center"><div style="font:700 20px system-ui;color:var(--fg)">01:24</div><div style="font:500 11px system-ui;color:var(--fg2);margin-top:2px">{{ t.duration }}</div></div>
+              <div style="flex:1;padding:13px;background:var(--card);border:1px solid var(--stroke);border-radius:15px;text-align:center"><div style="font:700 20px system-ui;color:var(--fg)">{{ msgCount }}</div><div style="font:500 11px system-ui;color:var(--fg2);margin-top:2px">{{ t.replicas }}</div></div>
+              <div style="flex:1;padding:13px;background:var(--card);border:1px solid var(--stroke);border-radius:15px;text-align:center"><div style="font:700 20px system-ui;color:var(--fg)">RU·EN</div><div style="font:500 11px system-ui;color:var(--fg2);margin-top:2px">{{ t.langs }}</div></div>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:20px 2px 9px">{{ t.fullLog }}</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ resultMsgs }}" as="m" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;padding:11px 13px;background:var(--card);border:1px solid var(--stroke);border-radius:14px"><span style="{{ m.chipStyle }};align-self:flex-start;margin-top:1px">{{ m.chip }}</span><div style="flex:1"><div style="font:600 14px/1.36 system-ui;color:var(--fg)">{{ m.trans }}</div><div style="font:400 12px/1.34 system-ui;color:var(--fg2);margin-top:3px">{{ m.orig }}</div></div></div>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;gap:9px;margin-top:15px">
+              <button onClick="{{ copyAll }}" style="flex:1;padding:13px;border-radius:14px;background:var(--card2);border:1px solid var(--stroke);color:var(--fg);font:600 13.5px system-ui;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="13" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V5a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3" stroke="currentColor" stroke-width="1.8"/></svg>{{ copyLabel }}</button>
+              <button onClick="{{ noop }}" style="flex:1;padding:13px;border-radius:14px;background:var(--card2);border:1px solid var(--stroke);color:var(--fg);font:600 13.5px system-ui;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 15V3M12 3 8 7M12 3l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12v6a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>{{ t.share }}</button>
+            </div>
+
+            <div style="margin-top:16px;padding:16px;background:var(--card);border:1px solid var(--stroke);border-radius:18px">
+              <div style="font:600 15px system-ui;color:var(--fg);text-align:center">{{ t.rate }}</div>
+              <div style="display:flex;justify-content:center;gap:8px;margin:13px 0 14px">
+                <sc-for list="{{ stars }}" as="s" hint-placeholder-count="5">
+                  <button onClick="{{ s.onClick }}" style="background:none;border:none;cursor:pointer;padding:0"><svg width="32" height="32" viewBox="0 0 24 24" fill="{{ s.fill }}"><path d="M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.9 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9L12 2.5z" stroke="{{ s.stroke }}" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center">
+                <sc-for list="{{ tagChips }}" as="c" hint-placeholder-count="3"><button onClick="{{ c.onClick }}" style="{{ c.style }}">{{ c.label }}</button></sc-for>
+              </div>
+            </div>
+
+            <button onClick="{{ backHome }}" style="margin-top:15px;padding:16px;border:none;border-radius:18px;background:linear-gradient(135deg,#7b7bff,#5142e6);color:#fff;font:700 16px system-ui;cursor:pointer;box-shadow:0 10px 26px rgba(81,66,230,.4)">{{ t.newSession }}</button>
+          </div>
+        </sc-if>
+
+        <!-- ---- SETTINGS / DIAGNOSTICS ---- -->
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="">
+          <div style="flex:1;overflow:auto;padding:8px 24px 26px">
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+              <button onClick="{{ backHome }}" style="width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--stroke);display:flex;align-items:center;justify-content:center;color:var(--fg);cursor:pointer"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <div style="font:700 24px system-ui;color:var(--fg);letter-spacing:-.02em">{{ t.setTitle }}</div>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:22px 2px 9px">{{ t.connection }}</div>
+            <div style="background:var(--card);border:1px solid var(--stroke);border-radius:16px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px"><span style="font:500 14px system-ui;color:var(--fg)">WebRTC</span><div style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:{{ connColor }}"></span><span style="font:600 13px system-ui;color:{{ connColor }}">{{ connLabel }}</span></div></div>
+              <div style="height:1px;background:var(--stroke)"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px"><span style="font:500 14px system-ui;color:var(--fg)">{{ t.ping }}</span><span style="font:600 13px system-ui;color:var(--fg2)">{{ pingMs }} ms</span></div>
+              <div style="height:1px;background:var(--stroke)"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px"><span style="font:500 14px system-ui;color:var(--fg)">{{ t.model }}</span><span style="font:600 13px system-ui;color:var(--fg2)">gpt-realtime</span></div>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:20px 2px 9px">{{ t.preferences }}</div>
+            <div style="background:var(--card);border:1px solid var(--stroke);border-radius:16px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px"><span style="font:500 14px system-ui;color:var(--fg)">{{ t.haptics }}</span><button onClick="{{ toggleHaptics }}" style="{{ hapticsToggle }}"><span style="{{ hapticsKnob }}"></span></button></div>
+              <div style="height:1px;background:var(--stroke)"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px"><span style="font:500 14px system-ui;color:var(--fg)">{{ t.autoplay }}</span><button onClick="{{ toggleAutoplay }}" style="{{ autoplayToggle }}"><span style="{{ autoplayKnob }}"></span></button></div>
+            </div>
+
+            <div style="font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);margin:20px 2px 9px">{{ t.about }}</div>
+            <div style="background:var(--card);border:1px solid var(--stroke);border-radius:16px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px"><span style="font:500 14px system-ui;color:var(--fg)">{{ t.version }}</span><span style="font:600 13px system-ui;color:var(--fg2)">1.0.0 (128)</span></div>
+            </div>
+            <div style="text-align:center;font:500 11px system-ui;color:var(--fg3);margin-top:22px">EasyTalk · SwiftUI · WebRTC · OpenAI Realtime</div>
+          </div>
+        </sc-if>
+
+        </div>
+
+        <!-- home indicator -->
+        <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--fg);opacity:.4;z-index:6"></div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    screen:'onboarding', theme:'dark', lang:'ru', transcriptStyle:'bubbles',
+    mode:'dialogue', sessionState:'connecting', muted:false, activeSpeaker:'ru',
+    network:'stable', messages:[], permMic:'idle', permSpeech:'idle',
+    rating:0, tags:[], copied:false, haptics:true, autoplay:true
+  };
+  timers=[];
+  script=[
+    {sp:'ru', orig:'Здравствуйте! Я хотел бы забронировать столик на двоих сегодня вечером.', trans:'Hello! I would like to book a table for two this evening.'},
+    {sp:'en', orig:'Of course. What time would you prefer?', trans:'Конечно. На какое время вам удобно?'},
+    {sp:'ru', orig:'В восемь часов, если можно — у окна.', trans:'At eight o’clock, by the window if possible.'}
+  ];
+  RU={
+    onbTitle:'Синхронный голосовой перевод', onbSub:'Говорите свободно — EasyTalk переводит вашу речь в реальном времени.',
+    b1t:'Синхронный перевод', b1s:'Речь переводится, пока вы говорите', b2t:'Низкая задержка', b2s:'Ответ за доли секунды через WebRTC', b3t:'Приватность', b3s:'Защищённая сессия, ничего не хранится',
+    permTitle:'Нужен доступ', critical:'Обязательно', micPerm:'Микрофон', micPermSub:'Для захвата и перевода речи',
+    speechPerm:'Распознавание речи', speechPermSub:'Для транскрипции и озвучивания', continue:'Продолжить',
+    micError:'Доступ к микрофону запрещён. Откройте «Настройки → EasyTalk → Микрофон», чтобы включить.',
+    hello:'С возвращением', homeTitle:'Готовы говорить?', modeTitle:'Режим перевода',
+    modeDialogue:'Диалог', modeDialogueSub:'Двусторонний перевод · Ru ↔ En',
+    modeMono:'Монолог', modeMonoSub:'В одну сторону · Ru → En', langTitle:'Языки', startBtn:'Начать перевод',
+    connecting:'Создаём защищённую сессию', connectingSub:'Согласование WebRTC-соединения…',
+    ready:'Готово к переводу', readySub:'Начните говорить — я слушаю', listening:'Слушаю…', translating:'Перевожу…', degraded:'Нестабильная связь',
+    switch:'Сменить спикера', mute:'Микрофон', unmute:'Вкл. звук', end:'Завершить',
+    resultTitle:'Итоги сессии', duration:'Длительность', replicas:'Реплик', langs:'Языки', fullLog:'Полный лог',
+    copy:'Скопировать', copied:'Скопировано', share:'Поделиться', rate:'Оцените качество перевода',
+    tagBad:'Плохо слышно', tagErr:'Ошибки перевода', tagInt:'Прерывания', newSession:'Новая сессия',
+    setTitle:'Диагностика', connection:'Соединение', connected:'Подключено', reconnecting:'Переподключение',
+    ping:'Задержка', model:'Модель', preferences:'Параметры', haptics:'Тактильный отклик', autoplay:'Автоозвучка перевода',
+    about:'О приложении', version:'Версия'
+  };
+  EN={
+    onbTitle:'Real-time voice translation', onbSub:'Speak freely — EasyTalk translates your speech in real time.',
+    b1t:'Simultaneous', b1s:'Translates as you speak', b2t:'Low latency', b2s:'Sub-second replies over WebRTC', b3t:'Private', b3s:'Secure session, nothing stored',
+    permTitle:'Access needed', critical:'Required', micPerm:'Microphone', micPermSub:'To capture and translate speech',
+    speechPerm:'Speech Recognition', speechPermSub:'For transcription and playback', continue:'Continue',
+    micError:'Microphone access denied. Open “Settings → EasyTalk → Microphone” to enable it.',
+    hello:'Welcome back', homeTitle:'Ready to talk?', modeTitle:'Translation mode',
+    modeDialogue:'Dialogue', modeDialogueSub:'Two-way translation · Ru ↔ En',
+    modeMono:'One-way', modeMonoSub:'Single direction · Ru → En', langTitle:'Languages', startBtn:'Start translating',
+    connecting:'Creating a secure session', connectingSub:'Negotiating WebRTC connection…',
+    ready:'Ready to translate', readySub:'Start speaking — I’m listening', listening:'Listening…', translating:'Translating…', degraded:'Unstable connection',
+    switch:'Switch speaker', mute:'Mic', unmute:'Unmute', end:'End',
+    resultTitle:'Session summary', duration:'Duration', replicas:'Turns', langs:'Languages', fullLog:'Full log',
+    copy:'Copy all', copied:'Copied', share:'Share', rate:'Rate translation quality',
+    tagBad:'Hard to hear', tagErr:'Translation errors', tagInt:'Interruptions', newSession:'New session',
+    setTitle:'Diagnostics', connection:'Connection', connected:'Connected', reconnecting:'Reconnecting',
+    ping:'Latency', model:'Model', preferences:'Preferences', haptics:'Haptic feedback', autoplay:'Auto-play translation',
+    about:'About', version:'Version'
+  };
+
+  componentWillUnmount(){ this.clearTimers(); }
+  clearTimers(){ this.timers.forEach(t=>clearTimeout(t)); this.timers=[]; }
+  after(ms,fn){ const id=setTimeout(fn,ms); this.timers.push(id); return id; }
+
+  themeC(){
+    return this.state.theme==='dark'
+    ? {bg:'#06070c',grad:'radial-gradient(130% 100% at 50% -10%,#1b1f30 0%,#0b0d15 48%,#06070c 100%)',card:'rgba(255,255,255,.06)',card2:'rgba(255,255,255,.1)',stroke:'rgba(255,255,255,.12)',fg:'#ffffff',fg2:'rgba(255,255,255,.6)',fg3:'rgba(255,255,255,.38)',bar:'rgba(14,16,24,.72)',ruBub:'rgba(10,132,255,.16)',enBub:'rgba(48,209,88,.15)'}
+    : {bg:'#eef0f5',grad:'radial-gradient(130% 100% at 50% -10%,#ffffff 0%,#eef0f6 52%,#e3e6ef 100%)',card:'rgba(255,255,255,.72)',card2:'#ffffff',stroke:'rgba(0,0,0,.08)',fg:'#0a0b10',fg2:'rgba(0,0,0,.55)',fg3:'rgba(0,0,0,.34)',bar:'rgba(255,255,255,.72)',ruBub:'rgba(10,132,255,.12)',enBub:'rgba(48,209,88,.13)'};
+  }
+
+  seg(active){ return 'flex:1;padding:8px 6px;border:none;border-radius:9px;font:600 12px system-ui;cursor:pointer;transition:.15s;'+(active?'background:rgba(255,255,255,.13);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)':'background:transparent;color:rgba(255,255,255,.5)'); }
+
+  nav=(s)=>{ this.clearTimers(); this.setState({screen:s}); };
+  goSettings=()=>this.nav('settings');
+  backHome=()=>this.nav('home');
+  grantMic=()=>this.setState({permMic:this.state.permMic==='granted'?'denied':'granted'});
+  grantSpeech=()=>this.setState({permSpeech:this.state.permSpeech==='granted'?'idle':'granted'});
+  finishOnboarding=()=>{ if(this.state.permMic==='granted') this.nav('home'); };
+  setModeDialogue=()=>this.setState({mode:'dialogue'});
+  setModeMono=()=>this.setState({mode:'oneway'});
+  swapLangs=()=>{};
+  noop=()=>{};
+
+  startSession=()=>{
+    this.clearTimers();
+    this.setState({screen:'live',sessionState:'connecting',messages:[],network:'stable'});
+    this.after(2400,()=>{ this.setState({sessionState:'ready'}); if(this.state.autoplay) this.after(900,()=>this.playDemo()); });
+  };
+  setSessionState=(k)=>{
+    this.clearTimers();
+    const st={sessionState:k,screen:'live'};
+    if(k==='connecting'||k==='ready') st.messages=[];
+    this.setState(st);
+  };
+  toggleNetwork=()=>this.setState({network:this.state.network==='stable'?'degraded':'stable'});
+  toggleMute=()=>this.setState({muted:!this.state.muted});
+  switchSpeaker=()=>this.setState({activeSpeaker:this.state.activeSpeaker==='ru'?'en':'ru'});
+  endSession=()=>{ this.clearTimers(); this.setState({screen:'result'}); };
+  toggleHaptics=()=>this.setState({haptics:!this.state.haptics});
+  toggleAutoplay=()=>this.setState({autoplay:!this.state.autoplay});
+
+  playDemo=()=>{ this.clearTimers(); this.setState({screen:'live',messages:[]}); this.after(200,()=>this.runStep(0)); };
+  runStep=(i)=>{
+    if(i>=this.script.length){ this.setState({sessionState:'ready'}); return; }
+    const m=this.script[i];
+    this.setState(s=>({activeSpeaker:m.sp,sessionState:'listening',
+      messages:[...s.messages,{id:i,sp:m.sp,orig:m.orig,trans:m.trans,origCount:0,transCount:0}]}));
+    this.reveal(i,'origCount',m.orig,()=>{
+      this.setState({sessionState:'translating'});
+      this.after(650,()=>this.reveal(i,'transCount',m.trans,()=>{
+        this.setState({sessionState:'ready'});
+        this.after(950,()=>this.runStep(i+1));
+      }));
+    });
+  };
+  reveal=(id,field,text,done)=>{
+    const total=text.split(' ').length;
+    const tick=(n)=>{ if(n>total){done();return;}
+      this.setState(s=>({messages:s.messages.map(mm=>mm.id===id?{...mm,[field]:n}:mm)}));
+      this.after(80,()=>tick(n+1));
+    };
+    this.after(320,()=>tick(1));
+  };
+  setRating=(n)=>this.setState({rating:n});
+  toggleTag=(k)=>this.setState(s=>({tags:s.tags.includes(k)?s.tags.filter(x=>x!==k):[...s.tags,k]}));
+  copyAll=()=>{ this.setState({copied:true}); this.after(1400,()=>this.setState({copied:false})); };
+
+  renderVals(){
+    const s=this.state, c=this.themeC(), t=s.lang==='ru'?this.RU:this.EN;
+    const activeColor=s.activeSpeaker==='ru'?'#0A84FF':'#30D158';
+    const rootStyle=`--bg:${c.bg};--grad:${c.grad};--card:${c.card};--card2:${c.card2};--stroke:${c.stroke};--fg:${c.fg};--fg2:${c.fg2};--fg3:${c.fg3};--bar:${c.bar};--active:${activeColor};--accent:#6d6dff`;
+
+    const screens=[['onboarding','Onboarding'],['home','Home'],['live','Live'],['result','Result'],['settings','Settings']]
+      .map(([k,l])=>({key:k,label:l,style:this.seg(s.screen===k),onClick:()=>this.nav(k)}));
+    const themes=[['dark','Dark'],['light','Light']].map(([k,l])=>({key:k,label:l,style:this.seg(s.theme===k),onClick:()=>this.setState({theme:k})}));
+    const langs=[['ru','RU'],['en','EN']].map(([k,l])=>({key:k,label:l,style:this.seg(s.lang===k),onClick:()=>this.setState({lang:k})}));
+    const transcripts=[['bubbles','Пузыри'],['tele','Суфлёр']].map(([k,l])=>({key:k,label:l,style:this.seg(s.transcriptStyle===k),onClick:()=>this.setState({transcriptStyle:k})}));
+    const states=[['connecting','Connecting'],['ready','Ready'],['listening','Listening'],['translating','Translating']]
+      .map(([k,l])=>({key:k,label:l,style:this.seg(s.sessionState===k&&s.screen==='live'),onClick:()=>this.setSessionState(k)}));
+    const netBtn={label:s.network==='degraded'?'⚠ Связь: нестабильна':'✓ Связь: стабильна',
+      onClick:this.toggleNetwork,
+      style:'margin-top:6px;padding:9px;border:none;border-radius:10px;cursor:pointer;font:600 12px system-ui;'+(s.network==='degraded'?'background:rgba(255,159,10,.18);color:#ffb340;box-shadow:inset 0 0 0 1px rgba(255,159,10,.35)':'background:rgba(48,209,88,.14);color:#4fd672;box-shadow:inset 0 0 0 1px rgba(48,209,88,.28)')};
+
+    const benefits=[
+      {icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M6 7v10M18 7v10M2 11v2M22 11v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',title:s.lang==='ru'?'Синхронный перевод':'Simultaneous',sub:s.lang==='ru'?'Речь переводится, пока вы говорите':'Translates as you speak'},
+      {icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="currentColor"/></svg>',title:s.lang==='ru'?'Низкая задержка':'Low latency',sub:s.lang==='ru'?'Ответ за доли секунды через WebRTC':'Sub-second replies over WebRTC'},
+      {icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',title:s.lang==='ru'?'Приватность':'Private',sub:s.lang==='ru'?'Защищённая сессия, ничего не хранится':'Secure session, nothing stored'}
+    ];
+
+    const permBtn=(st)=>{
+      if(st==='granted') return {label:t.continue&&(s.lang==='ru'?'Разрешено':'Allowed'),style:'flex:none;padding:8px 13px;border-radius:11px;border:none;font:600 12.5px system-ui;background:rgba(48,209,88,.16);color:#30d158;cursor:pointer'};
+      if(st==='denied') return {label:s.lang==='ru'?'Отклонено':'Denied',style:'flex:none;padding:8px 13px;border-radius:11px;border:none;font:600 12.5px system-ui;background:rgba(255,59,48,.16);color:#ff453a;cursor:pointer'};
+      return {label:s.lang==='ru'?'Разрешить':'Allow',style:'flex:none;padding:8px 14px;border-radius:11px;border:none;font:600 12.5px system-ui;background:var(--accent);color:#fff;cursor:pointer'};
+    };
+    const micBtn=permBtn(s.permMic), speechBtn=permBtn(s.permSpeech);
+    const micReady=s.permMic==='granted';
+    const contBtn='margin-top:auto;margin-bottom:2px;padding:16px;border:none;border-radius:18px;font:700 16px system-ui;cursor:pointer;transition:.2s;'+(micReady?'background:linear-gradient(135deg,#7b7bff,#5142e6);color:#fff;box-shadow:0 10px 26px rgba(81,66,230,.4)':'background:var(--card);color:var(--fg3);cursor:not-allowed');
+
+    const modeCard=(on)=>'display:flex;align-items:center;justify-content:space-between;padding:15px;border-radius:18px;cursor:pointer;text-align:left;transition:.18s;background:var(--card);border:1.5px solid '+(on?'var(--accent)':'var(--stroke)')+(on?';box-shadow:0 0 0 3px rgba(109,109,255,.15)':'');
+    const modeDot=(on)=>'width:22px;height:22px;flex:none;border-radius:50%;border:2px solid '+(on?'var(--accent)':'var(--stroke)')+';'+(on?'background:radial-gradient(circle,var(--accent) 0 40%,transparent 42%)':'');
+
+    // live derived
+    const sc=s.sessionState;
+    const statusMap={connecting:{c:'#6d6dff',l:t.connecting},ready:{c:'#30D158',l:t.ready},listening:{c:activeColor,l:t.listening},translating:{c:'#6d6dff',l:t.translating}};
+    const stm=statusMap[sc]||statusMap.ready;
+    const noMsg=s.messages.length===0;
+    const showHero=noMsg && (sc==='connecting'||sc==='ready'||sc==='listening');
+    const showTranscript=!showHero;
+
+    const chipStyle=(isRu)=>{const col=isRu?'#0A84FF':'#30D158';return `font:800 10px system-ui;letter-spacing:.05em;color:${col};background:${col}22;padding:3px 7px;border-radius:6px`;};
+    const msgs=s.messages.map(m=>{
+      const isRu=m.sp==='ru', col=isRu?'#0A84FF':'#30D158';
+      return {id:m.id,justify:isRu?'flex-start':'flex-end',
+        chip:isRu?'RU':'EN',role:isRu?(s.lang==='ru'?'спикер':'speaker'):(s.lang==='ru'?'спикер':'speaker'),
+        chipStyle:chipStyle(isRu),
+        bubbleStyle:`max-width:82%;background:${isRu?c.ruBub:c.enBub};border:1px solid ${col}40;border-radius:20px;border-bottom-${isRu?'left':'right'}-radius:6px;padding:11px 14px`,
+        origWords:m.orig.split(' ').slice(0,m.origCount),
+        transWords:m.trans.split(' ').slice(0,m.transCount)};
+    });
+    const activeJustify=s.activeSpeaker==='ru'?'flex-start':'flex-end';
+
+    // teleprompter
+    const teleAll=s.messages.map(m=>{const isRu=m.sp==='ru';return {isRu,col:isRu?'#0A84FF':'#30D158',chip:isRu?'RU → EN':'EN → RU',
+      orig:m.orig,trans:m.trans,origWords:m.orig.split(' ').slice(0,m.origCount),transWords:m.trans.split(' ').slice(0,m.transCount)};});
+    const current=teleAll[teleAll.length-1]||null;
+    const teleHistory=teleAll.slice(0,-1);
+
+    // result
+    const rmSrc=s.messages.length?s.messages:this.script.map((m,i)=>({...m,origCount:99,transCount:99,id:i}));
+    const resultMsgs=rmSrc.map(m=>{const isRu=m.sp==='ru';return {chip:isRu?'RU':'EN',chipStyle:chipStyle(isRu),trans:m.trans,orig:m.orig};});
+    const msgCount=resultMsgs.length;
+
+    const stars=[1,2,3,4,5].map(n=>({n,fill:n<=s.rating?'#ffcc00':'none',stroke:n<=s.rating?'#ffcc00':'var(--fg3)',onClick:()=>this.setRating(n)}));
+    const tagDefs=[['bad',t.tagBad],['err',t.tagErr],['int',t.tagInt]];
+    const tagChips=tagDefs.map(([k,l])=>{const on=s.tags.includes(k);return {label:l,onClick:()=>this.toggleTag(k),
+      style:'padding:8px 13px;border-radius:20px;font:600 12px system-ui;cursor:pointer;transition:.15s;border:1px solid '+(on?'transparent':'var(--stroke)')+';'+(on?'background:var(--accent);color:#fff':'background:var(--card2);color:var(--fg2)')};});
+
+    // mic toggle
+    const micToggleStyle='width:66px;height:66px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.18s;'+(s.muted?'background:var(--card2);box-shadow:inset 0 0 0 1px var(--stroke)':'background:linear-gradient(135deg,#7b7bff,#5142e6);box-shadow:0 10px 26px rgba(81,66,230,.45)');
+    const micToggleIcon=s.muted
+      ?'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" style="color:var(--fg)"><path d="M9 9v2a3 3 0 0 0 4.5 2.6M15 11V5a3 3 0 0 0-5.9-.7M5 11a7 7 0 0 0 10.4 6.1M12 18.5V21M4 4l16 16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>'
+      :'<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#fff"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/></svg>';
+    const micToggleLabel=s.muted?t.unmute:t.mute;
+
+    // toggles
+    const tog=(on)=>'width:46px;height:28px;border-radius:15px;border:none;cursor:pointer;position:relative;transition:.2s;background:'+(on?'#30D158':'var(--stroke)');
+    const knob=(on)=>'position:absolute;top:3px;left:'+(on?'21px':'3px')+';width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3);display:block';
+    const connColor=s.network==='degraded'?'#ff9f0a':'#30D158';
+    const connLabel=s.network==='degraded'?t.reconnecting:t.connected;
+
+    // dynamic island
+    const islandActive=s.screen==='live' && (sc==='listening'||sc==='translating'||sc==='connecting');
+    const islandLabel=sc==='connecting'?(s.lang==='ru'?'Подключение':'Connecting'):sc==='translating'?t.translating:(s.activeSpeaker==='ru'?'RU':'EN')+' · '+t.listening;
+    const islandStyle='position:absolute;top:13px;left:50%;transform:translateX(-50%);height:37px;background:#000;border-radius:20px;z-index:10;display:flex;align-items:center;justify-content:center;transition:width .3s;overflow:hidden;width:'+(islandActive?'186px':'126px');
+
+    return {
+      rootStyle, t, screens, themes, langs, transcripts, states, netBtn, playDemo:this.playDemo,
+      isOnboarding:s.screen==='onboarding', isHome:s.screen==='home', isLive:s.screen==='live', isResult:s.screen==='result', isSettings:s.screen==='settings',
+      benefits, micBtn, speechBtn, grantMic:this.grantMic, grantSpeech:this.grantSpeech,
+      micDenied:s.permMic==='denied', finishOnboarding:this.finishOnboarding, contBtn,
+      goSettings:this.goSettings, backHome:this.backHome,
+      setModeDialogue:this.setModeDialogue, setModeMono:this.setModeMono, swapLangs:this.swapLangs,
+      modeDlgStyle:modeCard(s.mode==='dialogue'), modeMonoStyle:modeCard(s.mode==='oneway'),
+      modeDlgDot:modeDot(s.mode==='dialogue'), modeMonoDot:modeDot(s.mode==='oneway'),
+      startSession:this.startSession,
+      statusColor:stm.c, statusLabel:stm.l, degraded:s.network==='degraded',
+      showHero, showTranscript, stConnecting:sc==='connecting', stReadyHero:sc==='ready', stListenHero:sc==='listening',
+      stTranslating:sc==='translating', isBubbles:s.transcriptStyle==='bubbles', isTele:s.transcriptStyle==='tele',
+      msgs, activeJustify, teleHistory, current, hasCurrent:!!current,
+      switchSpeaker:this.switchSpeaker, toggleMute:this.toggleMute, endSession:this.endSession,
+      micToggleStyle, micToggleLabel, muted:s.muted, notMuted:!s.muted,
+      resultMsgs, msgCount, copyAll:this.copyAll, copyLabel:s.copied?t.copied:t.copy, noop:this.noop,
+      stars, tagChips,
+      connColor, connLabel, pingMs:s.network==='degraded'?'214':'42',
+      hapticsToggle:tog(s.haptics), hapticsKnob:knob(s.haptics), toggleHaptics:this.toggleHaptics,
+      autoplayToggle:tog(s.autoplay), autoplayKnob:knob(s.autoplay), toggleAutoplay:this.toggleAutoplay,
+      islandActive, islandLabel, islandStyle
+    };
+  }
+}
+</script>
+</body>
+</html>

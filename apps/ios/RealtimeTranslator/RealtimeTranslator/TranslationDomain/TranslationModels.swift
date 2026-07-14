@@ -17,11 +17,17 @@ enum TranslationMode: String, Codable {
     case dialogue = "dialogue"
 }
 
-struct LegConfiguration: Codable {
+struct LegConfiguration: Decodable, CustomStringConvertible, CustomDebugStringConvertible {
     let clientLegId: String
     let targetLanguage: String
     let clientSecret: String
     let callsUrl: String
+    
+    var description: String {
+        "LegConfiguration(clientLegId: \(clientLegId), targetLanguage: \(targetLanguage), callsUrl: \(callsUrl), secret: ***)"
+    }
+    
+    var debugDescription: String { description }
 }
 
 enum CloseReason: String, Codable {

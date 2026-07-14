@@ -17,3 +17,10 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.yergakon.RealtimeTranslator
     dependencies:
       - package: WebRTC
+  RealtimeTranslatorTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources: [RealtimeTranslatorTests]
+    dependencies:
+      - target: RealtimeTranslator

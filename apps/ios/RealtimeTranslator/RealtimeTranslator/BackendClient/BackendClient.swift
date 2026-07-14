@@ -27,15 +27,15 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI {
     var isTokenValid = true // Can be toggled for testing 401
     
     private func newTraceId() -> String {
-        return "tr_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+        return "tr_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     }
     
     private func newSessionId() -> String {
-        return "ts_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+        return "ts_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     }
     
     private func newLegId() -> String {
-        return "leg_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(12)
+        return "leg_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     }
     
     func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse {
