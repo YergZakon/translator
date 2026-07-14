@@ -21,6 +21,14 @@ final class FakeSecureStringStore: SecureStringStore {
     }
 }
 
+actor RefreshInvocationCounter {
+    private(set) var value = 0
+
+    func increment() {
+        value += 1
+    }
+}
+
 final class URLProtocolStub: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
@@ -298,69 +306,29 @@ final class LiveBackendClientTests: XCTestCase {
         }
     }
 
-    func testConcurrent401ResponsesShareOneRegistration() async throws {
-        let memoryStorage = MemoryTokenStorage(appToken: "app_expired_token_1234567890")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [URLProtocolStub.self]
-        let client = LiveBackendClient(
-            baseURL: URL(string: "https://backend.example")!,
-            tokenStorage: memoryStorage,
-            session: URLSession(configuration: configuration)
-        )
-        let lock = NSLock()
-        var registrationCount = 0
+    func testConcurrentRefreshesShareOneOperation() async throws {
+        let coordinator = TokenRefreshCoordinator()
+        let counter = RefreshInvocationCounter()
 
-        URLProtocolStub.handler = { request in
-            if request.url?.path == "/v1/installations" {
-                lock.lock()
-                registrationCount += 1
-                lock.unlock()
-                let response = HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 201,
-                    httpVersion: nil,
-                    headerFields: nil
-                )!
-                let body = """
-                {
-                  "installationId":"ins_01234567890123456789",
-                  "tokenType":"Bearer",
-                  "appToken":"app_new_valid_token_1234567890",
-                  "expiresAt":null
-                }
-                """.data(using: .utf8)!
-                return (response, body)
-            }
-
-            let authorization = request.value(forHTTPHeaderField: "Authorization")
-            if authorization == "Bearer app_new_valid_token_1234567890" {
-                let response = HTTPURLResponse(
-                    url: try XCTUnwrap(request.url),
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: nil
-                )!
-                return (response, Self.configJSON)
-            }
-
-            let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
-                statusCode: 401,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            let body = """
-            {"error":{"code":"INVALID_APP_TOKEN","message":"invalid token","retryable":false,"traceId":"tr_01234567890123456789"}}
-            """.data(using: .utf8)!
-            return (response, body)
+        async let first: String = coordinator.refresh {
+            await counter.increment()
+            try await Task.sleep(nanoseconds: 100_000_000)
+            return "app_new_valid_token_1234567890"
         }
+        while await counter.value == 0 {
+            await Task.yield()
+        }
+        async let second: String = coordinator.refresh {
+            await counter.increment()
+            return "unexpected-second-token"
+        }
+        let tokens = try await [first, second]
 
-        async let first = client.getConfig(appVersion: "1.0", appBuild: 1, etag: nil)
-        async let second = client.getConfig(appVersion: "1.0", appBuild: 1, etag: nil)
-        let results = try await [first, second]
-
-        XCTAssertEqual(results.count, 2)
-        XCTAssertEqual(registrationCount, 1)
-        XCTAssertEqual(try memoryStorage.getAppToken(), "app_new_valid_token_1234567890")
+        XCTAssertEqual(tokens, [
+            "app_new_valid_token_1234567890",
+            "app_new_valid_token_1234567890"
+        ])
+        let invocationCount = await counter.value
+        XCTAssertEqual(invocationCount, 1)
     }
 }

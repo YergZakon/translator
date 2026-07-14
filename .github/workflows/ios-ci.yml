@@ -59,4 +59,7 @@ jobs:
           -scheme RealtimeTranslatorTests
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5'
           CODE_SIGNING_ALLOWED=NO
+          -test-timeouts-enabled YES
+          -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 120
           test

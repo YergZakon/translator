@@ -1,6 +1,6 @@
 import Foundation
 
-private actor TokenRefreshCoordinator {
+actor TokenRefreshCoordinator {
     private var task: Task<String, Error>?
 
     func refresh(using operation: @escaping () async throws -> String) async throws -> String {
