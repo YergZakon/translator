@@ -13,7 +13,7 @@ enum Side: String, Codable, CaseIterable {
 }
 
 enum TranslationMode: String, Codable {
-    case oneWayRuToEn = "oneWayRuToEn"
+    case oneWayRuToEn = "one_way_ru_to_en"
     case dialogue = "dialogue"
 }
 
