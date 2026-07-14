@@ -9,6 +9,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".dockerignore"
+      - "railway.json"
       - ".github/workflows/backend-ci.yml"
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".dockerignore"
+      - "railway.json"
       - ".github/workflows/backend-ci.yml"
   workflow_dispatch:
 

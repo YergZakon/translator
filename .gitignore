@@ -1,5 +1,6 @@
 # Local tools and secrets
 .tools/
+.railway/
 .env
 .env.*
 !.env.example
