@@ -2,10 +2,10 @@
 
 Единый редактируемый источник истины для Codex, Antigravity и владельца проекта.
 
-- Обновлено: 2026-07-14 09:36 +05:00
+- Обновлено: 2026-07-14 09:37 +05:00
 - PRD: `PRD_Realtime_Translator_iOS_30_days_v0.1.docx`, версия 0.1 от 2026-07-13
 - Состояние проекта: `READY_FOR_PARALLEL_WORK`
-- Git: baseline `fa2b62b` опубликован в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
+- Git: baseline `fa2b62b` и coordination head `495c533` опубликованы в `origin/main` репозитория `https://github.com/YergZakon/translator.git`
 - Интеграционная копия: `C:\Users\yergali\Desktop\переводчик`, ветка `main`
 - Codex worktree: `C:\Users\yergali\Desktop\translator-codex`, ветка `codex/be-api-01-contracts`
 - Antigravity worktree: `C:\Users\yergali\Desktop\translator-antigravity`, ветка `antigravity/ios-ios-01-skeleton`
@@ -67,7 +67,7 @@
 
 | ID | Область | Задача | Owner | Status | Ветка | Файлы/выход | Depends on | Проверка |
 |---|---|---|---|---|---|---|---|---|
-| SETUP-01 | Shared | Инициализировать Git, `.gitignore`, базовые ветки и README | Codex | DONE | `main` | GitHub baseline и отдельные worktrees готовы | — | commit `fa2b62b`; `git worktree list` |
+| SETUP-01 | Shared | Инициализировать Git, `.gitignore`, базовые ветки и README | Codex | DONE | `main` | GitHub baseline и отдельные remote-tracking worktrees готовы | — | commits `fa2b62b`, `495c533`; clean `git worktree list` |
 | ADR-01 | Shared | Выбрать Fastify или NestJS и структуру monorepo | Codex + Antigravity review | TODO | — | Решение D-002 | SETUP-01 | Обе стороны приняли |
 | API-01 | Shared | Создать OpenAPI 3.1 для P0 endpoints и error envelope | Codex | TODO | `codex/be-api-01-contracts` | `contracts/openapi.yaml` | ADR-01 | lint + Antigravity review |
 | TEL-01 | Shared | Зафиксировать allowlisted telemetry schema | Codex | TODO | — | `contracts/telemetry.schema.json` | ADR-01 | schema tests + iOS review |
@@ -218,6 +218,7 @@ Antigravity владеет реализацией. Изменение семан
 
 | Timestamp | Actor | Task/Decision | Изменения | Проверки | Next |
 |---|---|---|---|---|---|
+| 2026-07-14 09:37 +05:00 | Codex | Worktree handoff ready | Обе рабочие ветки fast-forward до `495c533`, опубликованы и настроены на tracking своих origin branches | Clean `git status -sb` в обоих worktrees | Antigravity принимает H-001 и начинает IOS-01; Codex начинает ADR-01/API-01 |
 | 2026-07-14 09:36 +05:00 | Codex | SETUP-01 complete | Baseline `fa2b62b` опубликован в `main`; созданы отдельные Codex и Antigravity worktrees/ветки | `git push`; `git worktree list` | Обновить обе ветки из `main`; Antigravity принимает H-001; ADR-01/API-01 |
 | 2026-07-14 09:34 +05:00 | Codex | SETUP-01 GitHub auth | Подтверждена авторизация `YergZakon`; добавлена `.gitattributes` для LF и binary DOCX | `gh auth status`; `gh repo view`: public, empty | Baseline commit/push; создать worktrees |
 | 2026-07-14 09:30 +05:00 | Codex | SETUP-01 tooling | Установлен portable GitHub CLI v2.96.0 в ignored `.tools`; добавлены `.gitignore` и `README.md` | `gh --version`; `.tools/` исключён из Git | Выполнить `gh auth login`; baseline commit/push; создать worktrees |
