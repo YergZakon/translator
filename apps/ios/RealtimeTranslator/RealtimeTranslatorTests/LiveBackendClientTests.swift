@@ -1,6 +1,26 @@
 import XCTest
 @testable import RealtimeTranslator
 
+final class FakeSecureStringStore: SecureStringStore {
+    var values: [String: String] = [:]
+    var error: Error?
+
+    func read(account: String) throws -> String? {
+        if let error { throw error }
+        return values[account]
+    }
+
+    func upsert(_ value: String, account: String) throws {
+        if let error { throw error }
+        values[account] = value
+    }
+
+    func delete(account: String) throws {
+        if let error { throw error }
+        values.removeValue(forKey: account)
+    }
+}
+
 final class URLProtocolStub: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
@@ -32,7 +52,7 @@ final class LiveBackendClientTests: XCTestCase {
         URLProtocolStub.handler = { request in
             XCTAssertEqual(request.url?.path, "/v1/config")
             XCTAssertNil(request.url?.query)
-            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer prototype-token")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer stored-test-token")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-App-Version"), "1.2.3")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-App-Build"), "42")
             XCTAssertEqual(request.value(forHTTPHeaderField: "If-None-Match"), "old-etag")
@@ -53,14 +73,16 @@ final class LiveBackendClientTests: XCTestCase {
         XCTAssertEqual(response.config?.version, "1.0")
     }
 
-    func testServerErrorEnvelopeIsPreserved() async throws {
+    func testNonAuthServerErrorEnvelopeIsPreservedWithoutRegistration() async throws {
         let errorJSON = """
-        {"error":{"code":"INVALID_APP_TOKEN","message":"bad token","retryable":false,"traceId":"tr_01234567890123456789"}}
+        {"error":{"code":"INSTALLATION_FORBIDDEN","message":"forbidden","retryable":false,"traceId":"tr_01234567890123456789"}}
         """.data(using: .utf8)!
+        var requestCount = 0
         URLProtocolStub.handler = { request in
+            requestCount += 1
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
-                statusCode: 401,
+                statusCode: 403,
                 httpVersion: nil,
                 headerFields: nil
             )!
@@ -71,8 +93,9 @@ final class LiveBackendClientTests: XCTestCase {
             _ = try await makeClient().getConfig(appVersion: "1.0", appBuild: 1, etag: nil)
             XCTFail("Expected server error")
         } catch BackendError.serverError(let error) {
-            XCTAssertEqual(error.code, .INVALID_APP_TOKEN)
+            XCTAssertEqual(error.code, .INSTALLATION_FORBIDDEN)
             XCTAssertEqual(error.traceId, "tr_01234567890123456789")
+            XCTAssertEqual(requestCount, 1)
         }
     }
 
@@ -81,7 +104,7 @@ final class LiveBackendClientTests: XCTestCase {
         configuration.protocolClasses = [URLProtocolStub.self]
         return LiveBackendClient(
             baseURL: URL(string: "https://backend.example")!,
-            appToken: "prototype-token",
+            appToken: "stored-test-token",
             session: URLSession(configuration: configuration)
         )
     }
@@ -100,4 +123,187 @@ final class LiveBackendClientTests: XCTestCase {
       "experiments":{}
     }
     """.data(using: .utf8)!
+
+    func testKeychainTokenStorageThroughInjectedSecureStore() throws {
+        let secureStore = FakeSecureStringStore()
+        let storage = KeychainTokenStorage(store: secureStore)
+        let testID = UUID()
+
+        try storage.saveAppToken("first-token")
+        XCTAssertEqual(try storage.getAppToken(), "first-token")
+        try storage.saveAppToken("rotated-token")
+        XCTAssertEqual(try storage.getAppToken(), "rotated-token")
+        try storage.saveInstallationPublicId(testID)
+        XCTAssertEqual(try storage.getInstallationPublicId(), testID)
+        try storage.deleteToken()
+        XCTAssertNil(try storage.getAppToken())
+    }
+
+    func testKeychainStorageSurfacesCorruptInstallationId() throws {
+        let secureStore = FakeSecureStringStore()
+        secureStore.values["installationPublicId"] = "not-a-uuid"
+        let storage = KeychainTokenStorage(store: secureStore)
+
+        XCTAssertThrowsError(try storage.getInstallationPublicId()) { error in
+            XCTAssertEqual(error as? KeychainError, .invalidData)
+        }
+    }
+
+    func testRegistrationResponseCannotBeEncodedAndRedactsToken() {
+        let response = RegisterInstallationResponse(
+            installationId: "ins_01234567890123456789",
+            tokenType: .bearer,
+            appToken: "sensitive-app-token",
+            expiresAt: nil
+        )
+
+        XCTAssertFalse(RegisterInstallationResponse.self is Encodable.Type)
+        XCTAssertFalse(response.description.contains("sensitive-app-token"))
+        XCTAssertTrue(response.description.contains("***"))
+    }
+
+    func testRegistrationRequestEncodesContractDeviceModel() throws {
+        let request = RegisterInstallationRequest(
+            installationPublicId: UUID(uuidString: "01234567-89AB-CDEF-0123-456789ABCDEF")!,
+            app: AppInfo(version: "1.0", build: 1),
+            device: DeviceInfo(osVersion: "18.5", modelClass: "phone")
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let device = try XCTUnwrap(json["device"] as? [String: Any])
+
+        XCTAssertEqual(device["modelClass"] as? String, "phone")
+    }
+
+    func test401RetryOnceWithReRegistration() async throws {
+        let memoryStorage = MemoryTokenStorage(appToken: "app_expired_token_1234567890")
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let session = URLSession(configuration: configuration)
+
+        let client = LiveBackendClient(
+            baseURL: URL(string: "https://backend.example")!,
+            tokenStorage: memoryStorage,
+            session: session
+        )
+
+        var requestCount = 0
+        var registered = false
+
+        URLProtocolStub.handler = { request in
+            requestCount += 1
+
+            if request.url?.path == "/v1/config" {
+                if request.value(forHTTPHeaderField: "Authorization") == "Bearer app_expired_token_1234567890" {
+                    let errorJSON = """
+                    {"error":{"code":"INVALID_APP_TOKEN","message":"invalid token","retryable":true,"traceId":"tr_01234567890123456789"}}
+                    """.data(using: .utf8)!
+                    let response = HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 401,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                    return (response, errorJSON)
+                } else if request.value(forHTTPHeaderField: "Authorization") == "Bearer app_new_valid_token_1234567890" {
+                    let response = HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                    return (response, Self.configJSON)
+                }
+            } else if request.url?.path == "/v1/installations" && request.httpMethod == "POST" {
+                registered = true
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                let responseJSON = """
+                {
+                  "installationId": "ins_01234567890123456789",
+                  "tokenType": "Bearer",
+                  "appToken": "app_new_valid_token_1234567890",
+                  "expiresAt": null
+                }
+                """.data(using: .utf8)!
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 201,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (response, responseJSON)
+            }
+
+            throw NSError(domain: "Test", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected request"])
+        }
+
+        let response = try await client.getConfig(appVersion: "1.0", appBuild: 1, etag: nil)
+
+        XCTAssertTrue(registered, "Should have triggered re-registration flow")
+        XCTAssertEqual(try memoryStorage.getAppToken(), "app_new_valid_token_1234567890", "Should have saved the new token in TokenStorage")
+        XCTAssertEqual(requestCount, 3, "Should have performed 3 requests: 1st getConfig (401), 2nd registerInstallation, 3rd getConfig (retry 200)")
+        XCTAssertEqual(response.config?.version, "1.0", "Should have successfully completed and returned the configuration")
+    }
+
+    func test401RetryFailsAgainBubblesUpError() async throws {
+        let memoryStorage = MemoryTokenStorage(appToken: "app_expired_token_1234567890")
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let session = URLSession(configuration: configuration)
+
+        let client = LiveBackendClient(
+            baseURL: URL(string: "https://backend.example")!,
+            tokenStorage: memoryStorage,
+            session: session
+        )
+
+        var requestCount = 0
+
+        URLProtocolStub.handler = { request in
+            requestCount += 1
+
+            if request.url?.path == "/v1/config" {
+                let errorJSON = """
+                {"error":{"code":"INVALID_APP_TOKEN","message":"invalid token","retryable":true,"traceId":"tr_01234567890123456789"}}
+                """.data(using: .utf8)!
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 401,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (response, errorJSON)
+            } else if request.url?.path == "/v1/installations" && request.httpMethod == "POST" {
+                let responseJSON = """
+                {
+                  "installationId": "ins_01234567890123456789",
+                  "tokenType": "Bearer",
+                  "appToken": "app_new_valid_token_1234567890",
+                  "expiresAt": null
+                }
+                """.data(using: .utf8)!
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 201,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (response, responseJSON)
+            }
+
+            throw NSError(domain: "Test", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected request"])
+        }
+
+        do {
+            _ = try await client.getConfig(appVersion: "1.0", appBuild: 1, etag: nil)
+            XCTFail("Should have thrown error on second 401")
+        } catch BackendError.serverError(let error) {
+            XCTAssertEqual(error.code, .INVALID_APP_TOKEN)
+            XCTAssertEqual(requestCount, 3, "Should stop after retrying once (1st getConfig, 2nd register, 3rd getConfig)")
+        }
+    }
+
 }

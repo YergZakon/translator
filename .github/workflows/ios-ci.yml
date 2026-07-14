@@ -17,7 +17,9 @@ concurrency:
 jobs:
   build-and-test:
     name: XcodeGen, build, and test
-    runs-on: macos-15
+    # The ARM macos-15 jobs observed here intermittently lost CoreSimulator.
+    # Keep Xcode 16.4 while using the explicitly supported Intel image.
+    runs-on: macos-15-intel
     timeout-minutes: 30
     defaults:
       run:
@@ -48,7 +50,7 @@ jobs:
           xcodebuild
           -project RealtimeTranslator.xcodeproj
           -scheme RealtimeTranslator
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5'
+          -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO
           build
 
@@ -58,5 +60,9 @@ jobs:
           -project RealtimeTranslator.xcodeproj
           -scheme RealtimeTranslatorTests
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5'
+          -destination-timeout 120
           CODE_SIGNING_ALLOWED=NO
+          -test-timeouts-enabled YES
+          -default-test-execution-time-allowance 60
+          -maximum-test-execution-time-allowance 120
           test

@@ -1,11 +1,11 @@
 # Realtime Translator iOS
 
-## Prototype backend token
+## Installation authentication
 
-Until the installation-token flow is implemented, set `APP_TOKEN` in the active
-Xcode scheme environment to the same prototype token configured in the backend
-`APP_TOKENS` variable. The token is injected into `LiveBackendClient`; it is not
-stored in the repository or printed to logs.
+The app creates an anonymous installation through `POST /v1/installations` when
+an authenticated request first receives `INVALID_APP_TOKEN`. The public
+installation UUID and opaque app token are stored in Keychain. The token is
+device-only, is never stored in source or UserDefaults, and is never logged.
 
 ## Environment Setup
 This project uses [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the `.xcodeproj` file. Do not commit the `.xcodeproj` file to source control.
