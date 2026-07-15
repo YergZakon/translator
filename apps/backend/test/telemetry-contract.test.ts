@@ -6,6 +6,19 @@ import Fastify from 'fastify';
 
 const schemaPath = new URL('../../../contracts/telemetry.schema.json', import.meta.url);
 const fixturePath = new URL('../../../contracts/examples/telemetry-batch.request.json', import.meta.url);
+const openAPIPath = new URL('../../../contracts/openapi.yaml', import.meta.url);
+
+const acceptedFeedbackCategories = [
+  'wrong_meaning',
+  'missing_content',
+  'critical_entity',
+  'latency',
+  'audio_quality',
+  'echo_loop',
+  'connection',
+  'ui',
+  'other'
+] as const;
 
 async function makeValidator() {
   const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
@@ -105,6 +118,58 @@ test('TEL-01 enforces event-specific enums, ranges and batch bounds', async () =
     for (const payload of invalidPayloads) {
       const response = await app.inject({ method: 'POST', url: '/validate', payload });
       assert.equal(response.statusCode, 400);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('TEL-02 feedback telemetry categories exactly match the accepted Feedback API taxonomy', async () => {
+  const app = await makeValidator();
+  const openAPI = await readFile(openAPIPath, 'utf8');
+  const feedbackRequest = openAPI.match(/    FeedbackRequest:\r?\n([\s\S]*?)        comment:/)?.[1];
+  assert.ok(feedbackRequest, 'FeedbackRequest category block must remain discoverable');
+
+  const openAPICategories = [...feedbackRequest.matchAll(/^              - ([a-z_]+)$/gm)].map(
+    ([, category]) => category
+  );
+  assert.deepEqual(openAPICategories, acceptedFeedbackCategories);
+
+  const baseEvent = {
+    eventId: 'd2719cc5-ad3c-4f26-9307-108d0b591482',
+    sessionId: 'ts_0123456789abcdefghijklmn',
+    legId: null,
+    type: 'feedback_submitted',
+    monotonicMs: 9000
+  };
+  const baseBatch = {
+    schemaVersion: '1.0',
+    sentAt: '2026-07-15T09:50:00Z'
+  };
+
+  try {
+    for (const category of acceptedFeedbackCategories) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/validate',
+        payload: {
+          ...baseBatch,
+          events: [{ ...baseEvent, properties: { rating: 5, categories: [category] } }]
+        }
+      });
+      assert.equal(response.statusCode, 204, `accepted Feedback API category ${category}`);
+    }
+
+    for (const category of ['wrong_number', 'wrong_name', 'omission', 'echo']) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/validate',
+        payload: {
+          ...baseBatch,
+          events: [{ ...baseEvent, properties: { rating: 2, categories: [category] } }]
+        }
+      });
+      assert.equal(response.statusCode, 400, `obsolete telemetry-only category ${category}`);
     }
   } finally {
     await app.close();

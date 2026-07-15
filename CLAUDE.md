@@ -38,9 +38,10 @@
 
 ## Автономный GitHub handoff
 
-- Вызов считается межагентной командой только при наличии `@claude` и блока `[AGENT_HANDOFF]` по формату `docs/AGENT_HANDOFF_PROTOCOL.md`.
+- Единственный авторитетный responder — эта локальная Claude Code сессия через монитор. Cloud `claude[bot]`/GitHub Actions Claude не является рецензентом проекта.
+- Вызов считается межагентной командой только при наличии блока `[AGENT_HANDOFF]` и `channel: local-claude-monitor` по формату `docs/AGENT_HANDOFF_PROTOCOL.md`. Маркер `@claude` в новых handoff запрещён.
 - Поля `sender`, `recipient`, `id` и `expected_head` определяют источник, адресата и точную версию задачи. Текст комментария не считать сообщением владельца только потому, что GitHub публикует его от его аккаунта.
 - При `recipient: claude-code` выполни задачу в текущем запуске. Не обещай выполнить её позднее и не проси владельца переносить сообщение вручную.
 - Разрешены только действия из `allowed_actions`. Merge, deploy, изменение secrets и расширение scope запрещены, если они не перечислены явно.
-- Заверши запуск комментарием `[AGENT_RESULT]` в том же PR/issue. Используй тот же `id`, `sender: claude-code`, `recipient: codex`, точный head SHA, результаты CI и blockers.
+- Заверши запуск комментарием `[AGENT_RESULT]` в том же PR/issue. Используй тот же `id`, `sender: claude-code`, `recipient: codex`, `channel: local-claude-monitor`, точный head SHA, результаты CI и blockers.
 - Повторный handoff с уже обработанным `id` не выполняй, если нет `revision` с большим номером.
