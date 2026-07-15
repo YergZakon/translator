@@ -18,7 +18,7 @@ enum SessionState: Equatable {
         case .creatingSession: return "Создаем сессию..."
         case .connecting: return "Подключаемся..."
         case .active: return "Можно говорить"
-        case .reconnecting(let attempt): return "Восстанавливаем соединение (\(attempt)/3)"
+        case .reconnecting(let attempt): return "Восстанавливаем соединение (попытка \(attempt))"
         case .failed(_, let message): return "Ошибка: \(message)"
         case .completed: return "Сессия завершена"
         }
@@ -43,13 +43,29 @@ final class TranslationSessionStore: ObservableObject {
     private let dependencies: DependencyContainer
     private let makeLeg: TranslationLegFactory
 
+    private var sessionId: String?
+    private var activeClientLegId: String = "ru-to-en"
+    private var reconnectMaxAttempts = 0
+    private var reconnectBackoffMs: [Int] = []
+    private var disconnectedGraceMs = 0
+    private var reconnectTask: Task<Void, Never>?
+    private let reconnectClock: ReconnectClock
+    private lazy var reconnectCoordinator = ReconnectCoordinator(
+        sessionAPI: dependencies.sessionAPI,
+        makeLeg: makeLeg,
+        diagnostics: dependencies.diagnosticsStore,
+        clock: reconnectClock
+    )
+
     init(
         dependencies: DependencyContainer = .shared,
+        reconnectClock: ReconnectClock = SystemReconnectClock(),
         makeLeg: @escaping TranslationLegFactory = { configuration, side, diagnostics in
             OpenAITranslationLeg(configuration: configuration, side: side, diagnostics: diagnostics)
         }
     ) {
         self.dependencies = dependencies
+        self.reconnectClock = reconnectClock
         self.makeLeg = makeLeg
     }
 
@@ -90,6 +106,7 @@ final class TranslationSessionStore: ObservableObject {
                 )
                 return
             }
+            disconnectedGraceMs = config.reconnectPolicy.disconnectedGraceMs
 
             state = .creatingSession
             let request = CreateTranslationSessionRequest(
@@ -111,6 +128,11 @@ final class TranslationSessionStore: ObservableObject {
                 state = .failed(code: "NO_LEGS", message: "Backend returned zero legs")
                 return
             }
+
+            sessionId = response.sessionId
+            activeClientLegId = credentials.clientLegId
+            reconnectMaxAttempts = response.policy.maxReconnectAttempts
+            reconnectBackoffMs = response.policy.reconnectBackoffMs
 
             state = .connecting
             let leg = makeLeg(
@@ -167,12 +189,15 @@ final class TranslationSessionStore: ObservableObject {
     }
 
     func stopSession() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         let leg = currentLeg
         currentLeg = nil
         eventTask?.cancel()
         eventTask = nil
         state = .completed
         segments.removeAll()
+        sessionId = nil
 
         Task {
             await leg?.close(reason: .userStopped)
@@ -181,6 +206,98 @@ final class TranslationSessionStore: ObservableObject {
 
     func reportError(code: String, message: String) {
         state = .failed(code: code, message: message)
+    }
+
+    /// User-initiated retry after a terminal failure. No leg exists to drain at this point.
+    func manualRetry() {
+        guard case .failed = state, sessionId != nil else { return }
+        startReconnect(reason: .manualRetry, applyGracePeriod: false)
+    }
+
+    private func startReconnect(reason: RecreateLegReason, applyGracePeriod: Bool) {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            await self?.beginReconnect(reason: reason, applyGracePeriod: applyGracePeriod)
+        }
+    }
+
+    private func beginReconnect(reason: RecreateLegReason, applyGracePeriod: Bool) async {
+        guard let sessionId else {
+            state = .failed(code: "WEBRTC_FAILED", message: "WebRTC connection lost")
+            return
+        }
+
+        state = .reconnecting(attempt: 0)
+
+        if applyGracePeriod && disconnectedGraceMs > 0 {
+            // Recovery grace: the original leg and its event observation stay alive so
+            // a transient .disconnected can resolve on the existing PeerConnection.
+            // If that same leg reports .connected, handleEvent cancels this task
+            // before anything is detached, drained or recreated.
+            do {
+                try await reconnectClock.sleep(milliseconds: disconnectedGraceMs)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+        }
+
+        // Grace expired (or the leg failed hard): detach the leg now. Its drain/close
+        // is driven explicitly by the reconnect coordinator instead.
+        let failedLeg = currentLeg
+        currentLeg = nil
+        eventTask?.cancel()
+        eventTask = nil
+
+        let context = ReconnectSessionContext(
+            sessionId: sessionId,
+            clientLegId: activeClientLegId,
+            side: .russianSpeaker,
+            maxAttempts: reconnectMaxAttempts,
+            backoffMs: reconnectBackoffMs
+        )
+
+        let outcome = await reconnectCoordinator.reconnect(
+            failedLeg: failedLeg,
+            reason: reason,
+            context: context
+        ) { [weak self] attempt in
+            Task { @MainActor in
+                self?.state = .reconnecting(attempt: attempt)
+            }
+        }
+
+        guard !Task.isCancelled else {
+            // Session was stopped while this reconnect was in flight. Never let a
+            // just-connected replacement leg become current or keep running unattended.
+            if case .reconnected(let leg, _) = outcome {
+                await leg.close(reason: .userStopped)
+            }
+            return
+        }
+
+        switch outcome {
+        case .reconnected(let leg, let credentials):
+            activeClientLegId = credentials.clientLegId
+            currentLeg = leg
+            consumeEvents(from: leg)
+        case .resourceNotFound:
+            self.sessionId = nil
+            state = .failed(
+                code: AppErrorCode.RESOURCE_NOT_FOUND.rawValue,
+                message: "Translation session is no longer available. Please start a new session."
+            )
+        case .killSwitchActive:
+            state = .failed(
+                code: AppErrorCode.KILL_SWITCH_ACTIVE.rawValue,
+                message: "Translation is temporarily unavailable."
+            )
+        case .exhausted:
+            state = .failed(
+                code: "RECONNECT_EXHAUSTED",
+                message: "Unable to reconnect after multiple attempts."
+            )
+        }
     }
 
     private func currentAppInfo() -> AppInfo {
@@ -206,11 +323,19 @@ final class TranslationSessionStore: ObservableObject {
             case .connecting:
                 state = .connecting
             case .connected:
+                // Never resurrect an already-stopped session from a stale event.
+                guard currentLeg != nil else { return }
+                // A live leg (the original recovering within the grace window, or a
+                // freshly connected replacement) ends any pending reconnect.
+                reconnectTask?.cancel()
+                reconnectTask = nil
                 await currentLeg?.setMicrophoneEnabled(!isMuted)
                 await currentLeg?.setOutputEnabled(true)
                 state = .active
-            case .disconnected, .failed:
-                state = .failed(code: "WEBRTC_FAILED", message: "WebRTC connection lost")
+            case .disconnected:
+                startReconnect(reason: .disconnectedTimeout, applyGracePeriod: true)
+            case .failed:
+                startReconnect(reason: .connectionFailed, applyGracePeriod: false)
             }
         case .transcriptDelta(let segment):
             appendTranscriptDelta(

@@ -130,6 +130,19 @@ struct CreateSessionResponse: Decodable {
     let policy: SessionPolicy
 }
 
+// MARK: - Recreate Translation Leg (reconnect)
+enum RecreateLegReason: String, Encodable {
+    case connectionFailed = "connection_failed"
+    case disconnectedTimeout = "disconnected_timeout"
+    case secretExpired = "secret_expired"
+    case manualRetry = "manual_retry"
+}
+
+struct RecreateTranslationLegRequest: Encodable {
+    let clientLegId: String
+    let reason: RecreateLegReason
+}
+
 // MARK: - Error Response
 enum AppErrorCode: String, Decodable {
     case INVALID_REQUEST

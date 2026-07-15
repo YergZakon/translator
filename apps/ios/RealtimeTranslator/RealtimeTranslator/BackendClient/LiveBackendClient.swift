@@ -91,6 +91,34 @@ final class LiveBackendClient: SessionAPI, ConfigAPI, InstallationAPI {
         return try JSONDecoder().decode(CreateSessionResponse.self, from: data)
     }
 
+    func recreateTranslationLeg(
+        sessionId: String,
+        request: RecreateTranslationLegRequest,
+        idempotencyKey: String
+    ) async throws -> TranslationLegCredentials {
+        let url = baseURL.appendingPathComponent("v1/translation-sessions/\(sessionId)/legs")
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        try authorize(&urlRequest)
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+
+        let (data, response) = try await perform(urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw invalidResponseError(message: "Invalid response")
+        }
+
+        guard httpResponse.statusCode == 201 else {
+            throw decodeServerError(data: data, statusCode: httpResponse.statusCode)
+        }
+
+        return try JSONDecoder().decode(TranslationLegCredentials.self, from: data)
+    }
+
     func registerInstallation(request: RegisterInstallationRequest) async throws -> RegisterInstallationResponse {
         let url = baseURL.appendingPathComponent("v1/installations")
         var urlRequest = URLRequest(url: url)
