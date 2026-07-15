@@ -27,6 +27,11 @@ const migrations = [
     version: 5,
     name: 'session_feedback',
     url: new URL('../../migrations/005_session_feedback.sql', import.meta.url)
+  },
+  {
+    version: 6,
+    name: 'technical_telemetry',
+    url: new URL('../../migrations/006_technical_telemetry.sql', import.meta.url)
   }
 ] as const;
 

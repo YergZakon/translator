@@ -6,6 +6,7 @@ import { OpenAISecretBroker } from './services/openai-secret-broker.js';
 import { runMigrations } from './storage/migrations.js';
 import { PostgresInstallationRepository } from './storage/postgres-installation-repository.js';
 import { PostgresSessionRepository } from './storage/postgres-session-repository.js';
+import { PostgresTelemetryRepository } from './storage/postgres-telemetry-repository.js';
 
 async function main(): Promise<void> {
   const runtime = loadRuntimeConfig();
@@ -21,10 +22,12 @@ async function main(): Promise<void> {
       pool,
       runtime.safetyIdentifierSecret
     );
+    const telemetryRepository = new PostgresTelemetryRepository(pool);
     const app = buildApp({
       serviceVersion: runtime.serviceVersion,
       installationRepository,
       sessionRepository,
+      telemetryRepository,
       safetyIdentifierSecret: runtime.safetyIdentifierSecret,
       secretBroker: new OpenAISecretBroker({
         apiKey: runtime.openAIAPIKey,

@@ -328,3 +328,12 @@ export const feedbackResponseSchema = Type.Object(
   },
   { additionalProperties: false }
 );
+
+export const telemetryBatchResponseSchema = Type.Object(
+  {
+    accepted: Type.Integer({ minimum: 0 }),
+    rejected: Type.Integer({ minimum: 0 }),
+    rejectedEventIds: Type.Array(Type.String({ format: 'uuid' }), { maxItems: 100 })
+  },
+  { additionalProperties: false }
+);
