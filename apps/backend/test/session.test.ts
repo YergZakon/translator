@@ -13,6 +13,8 @@ import {
   type TranslationSecret
 } from '../src/services/openai-secret-broker.js';
 import type { QuotaPolicy } from '../src/services/quota-service.js';
+import type { SessionRepository } from '../src/services/session-repository.js';
+import { InMemorySessionRepository } from '../src/storage/in-memory-session-repository.js';
 
 const apps: FastifyInstance[] = [];
 const appToken = 'test-prototype-app-token';
@@ -28,6 +30,15 @@ const oneWayRequest = {
   legs: [{ clientLegId: 'ru-to-en', targetLanguage: 'en' }],
   app: { version: '0.1.0', build: 42 },
   device: { osVersion: '26.0', modelClass: 'phone' }
+};
+const completionRequest = {
+  result: 'user_stopped',
+  durationSeconds: 32,
+  activeAudioSeconds: 18,
+  turns: 3,
+  reconnects: 1,
+  finalRouteType: 'bluetooth',
+  errorCode: null
 };
 
 class RecordingBroker implements SecretBroker {
@@ -47,7 +58,8 @@ function makeApp(
   killSwitch = false,
   now: () => Date = () => new Date(),
   acceptedTokens: string[] = [appToken],
-  quotaPolicy?: QuotaPolicy
+  quotaPolicy?: QuotaPolicy,
+  sessionRepository?: SessionRepository
 ): FastifyInstance {
   let id = 0;
   const config = structuredClone(defaultAppConfig);
@@ -62,6 +74,7 @@ function makeApp(
     ),
     secretBroker: broker,
     ...(quotaPolicy === undefined ? {} : { quotaPolicy }),
+    ...(sessionRepository === undefined ? {} : { sessionRepository }),
     now,
     sessionIdFactory: (prefix) => `${prefix}_${String(++id).padStart(24, 'a')}`
   });
@@ -298,6 +311,148 @@ test('daily leg-minute quota returns the UTC reset delay before broker mint', as
 
   assert.equal(limited.statusCode, 429);
   assert.equal(limited.json().error.retryAfterMs, 3_600_000);
+  assert.equal(broker.calls.length, 1);
+});
+
+test('session completion is first-write-wins and releases the active-leg quota', async () => {
+  const broker = new RecordingBroker();
+  const current = new Date('2026-07-15T05:00:00Z');
+  const app = makeApp(broker, false, () => current, [appToken], {
+    maxParallelLegs: 1,
+    maxSecretMintsPerWindow: 10,
+    secretMintWindowMs: 60_000,
+    maxDailyLegMinutes: 120
+  });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  assert.equal(created.statusCode, 201);
+  const sessionId = created.json().sessionId as string;
+
+  const blocked = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers: { ...headers, 'idempotency-key': '16d0dd2e-d643-46c8-8231-522cc029fc95' },
+    payload: oneWayRequest
+  });
+  assert.equal(blocked.statusCode, 429);
+
+  const completed = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: headers.authorization },
+    payload: completionRequest
+  });
+  assert.equal(completed.statusCode, 200);
+  assert.deepEqual(completed.json(), {
+    sessionId,
+    status: 'completed',
+    completedAt: current.toISOString()
+  });
+
+  current.setSeconds(current.getSeconds() + 1);
+  const replay = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: headers.authorization },
+    payload: { ...completionRequest, result: 'failed', errorCode: 'NETWORK' }
+  });
+  assert.equal(replay.statusCode, 200);
+  assert.deepEqual(replay.json(), completed.json());
+
+  const replacement = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers: { ...headers, 'idempotency-key': '1cc047eb-d17e-40e8-864d-989fd9090a2d' },
+    payload: oneWayRequest
+  });
+  assert.equal(replacement.statusCode, 201);
+  assert.equal(broker.calls.length, 2);
+});
+
+test('session completion remains available under kill switch and hides foreign sessions', async () => {
+  const broker = new RecordingBroker();
+  const repository = new InMemorySessionRepository();
+  const otherToken = 'other-owner-app-token';
+  const activeApp = makeApp(
+    broker,
+    false,
+    () => new Date('2026-07-15T05:00:00Z'),
+    [appToken, otherToken],
+    undefined,
+    repository
+  );
+  const created = await activeApp.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const sessionId = created.json().sessionId as string;
+
+  const foreign = await activeApp.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: `Bearer ${otherToken}` },
+    payload: completionRequest
+  });
+  assert.equal(foreign.statusCode, 404);
+
+  const pausedApp = makeApp(
+    broker,
+    true,
+    () => new Date('2026-07-15T05:00:01Z'),
+    [appToken],
+    undefined,
+    repository
+  );
+  const completed = await pausedApp.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: headers.authorization },
+    payload: completionRequest
+  });
+  assert.equal(completed.statusCode, 200);
+  assert.equal(broker.calls.length, 1);
+});
+
+test('completed sessions cannot recreate legs and invalid completion payloads are rejected', async () => {
+  const broker = new RecordingBroker();
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const sessionId = created.json().sessionId as string;
+
+  const invalid = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: headers.authorization },
+    payload: { ...completionRequest, activeAudioSeconds: -1 }
+  });
+  assert.equal(invalid.statusCode, 400);
+
+  const completed = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/complete`,
+    headers: { authorization: headers.authorization },
+    payload: completionRequest
+  });
+  assert.equal(completed.statusCode, 200);
+
+  const recreated = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'manual_retry' }
+  });
+  assert.equal(recreated.statusCode, 404);
   assert.equal(broker.calls.length, 1);
 });
 

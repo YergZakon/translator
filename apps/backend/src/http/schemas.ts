@@ -253,3 +253,40 @@ export const recreateTranslationLegRequestSchema = Type.Object(
   },
   { additionalProperties: false }
 );
+
+export const completeTranslationSessionRequestSchema = Type.Object(
+  {
+    result: Type.Union([
+      Type.Literal('completed'),
+      Type.Literal('user_stopped'),
+      Type.Literal('failed'),
+      Type.Literal('killed_by_config')
+    ]),
+    durationSeconds: Type.Integer({ minimum: 0, maximum: 7200 }),
+    activeAudioSeconds: Type.Integer({ minimum: 0, maximum: 7200 }),
+    turns: Type.Integer({ minimum: 0 }),
+    reconnects: Type.Integer({ minimum: 0 }),
+    finalRouteType: Type.Optional(
+      Type.Union([
+        Type.Literal('built_in'),
+        Type.Literal('speaker'),
+        Type.Literal('bluetooth'),
+        Type.Literal('wired'),
+        Type.Literal('usb'),
+        Type.Literal('unknown'),
+        Type.Null()
+      ])
+    ),
+    errorCode: Type.Optional(Type.Union([Type.String({ maxLength: 80 }), Type.Null()]))
+  },
+  { additionalProperties: false }
+);
+
+export const completeTranslationSessionResponseSchema = Type.Object(
+  {
+    sessionId: Type.String({ pattern: '^ts_[A-Za-z0-9]{20,40}$' }),
+    status: Type.Literal('completed'),
+    completedAt: Type.String({ format: 'date-time' })
+  },
+  { additionalProperties: false }
+);

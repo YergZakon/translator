@@ -1,7 +1,7 @@
+import type { TargetLanguage } from './openai-secret-broker.js';
 import type {
-  TargetLanguage
-} from './openai-secret-broker.js';
-import type {
+  CompleteTranslationSessionRequest,
+  CompleteTranslationSessionResponse,
   TranslationLegCredentials,
   TranslationSession
 } from './session-service.js';
@@ -38,6 +38,13 @@ export interface RecreateLegPersistenceInput extends CreateSessionPersistenceInp
   clientLegId: string;
 }
 
+export interface CompleteSessionPersistenceInput {
+  safetyIdentifier: string;
+  sessionId: string;
+  now: Date;
+  completion: CompleteTranslationSessionRequest;
+}
+
 export class SessionRepositoryError extends Error {
   constructor(
     readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND' | 'RATE_LIMITED',
@@ -58,4 +65,8 @@ export interface SessionRepository {
     input: RecreateLegPersistenceInput,
     create: (session: StoredSession) => Promise<TranslationLegCredentials>
   ): Promise<TranslationLegCredentials>;
+
+  completeSession(
+    input: CompleteSessionPersistenceInput
+  ): Promise<CompleteTranslationSessionResponse>;
 }

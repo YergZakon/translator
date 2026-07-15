@@ -355,3 +355,127 @@ test(
     }
   }
 );
+
+test(
+  'PostgreSQL persists first session completion and releases its active-leg slot',
+  { skip: databaseUrl === undefined ? 'TEST_DATABASE_URL is not configured' : false },
+  async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+    try {
+      await runMigrations(pool);
+      await pool.query(
+        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
+      );
+
+      const broker = new RecordingBroker();
+      let sequence = 0;
+      const policy = {
+        maxParallelLegs: 1,
+        maxSecretMintsPerWindow: 10,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: 120
+      };
+      const service = () =>
+        new SessionService({
+          broker,
+          repository: new PostgresSessionRepository(pool, encryptionSecret),
+          now: () => now,
+          quotaPolicy: policy,
+          idFactory: (prefix) => `${prefix}_${String(++sequence).padStart(24, 'c')}`
+        });
+      const createContext = (key: string) => ({
+        idempotencyKey: key,
+        safetyIdentifier: owner,
+        traceId: 'tr_cccccccccccccccccccccccccccccccc',
+        config: structuredClone(defaultAppConfig)
+      });
+      const session = await service().create(request, createContext(createKey));
+      await service().recreateLeg(
+        { clientLegId: 'ru-to-en', reason: 'manual_retry' },
+        {
+          sessionId: session.sessionId,
+          idempotencyKey: recreateKey,
+          safetyIdentifier: owner
+        }
+      );
+      const completionContext = { sessionId: session.sessionId, safetyIdentifier: owner };
+      const completionA = {
+        result: 'user_stopped' as const,
+        durationSeconds: 45,
+        activeAudioSeconds: 21,
+        turns: 4,
+        reconnects: 1,
+        finalRouteType: 'bluetooth' as const,
+        errorCode: null
+      };
+      const completionB = {
+        ...completionA,
+        result: 'failed' as const,
+        errorCode: 'NETWORK'
+      };
+
+      const [first, concurrent] = await Promise.all([
+        service().complete(completionA, completionContext),
+        service().complete(completionB, completionContext)
+      ]);
+      assert.deepEqual(concurrent, first);
+      assert.deepEqual(await service().complete(completionB, completionContext), first);
+
+      await assert.rejects(
+        service().complete(completionA, { ...completionContext, safetyIdentifier: otherOwner }),
+        (error: unknown) =>
+          error instanceof SessionServiceError && error.code === 'RESOURCE_NOT_FOUND'
+      );
+      await assert.rejects(
+        service().recreateLeg(
+          { clientLegId: 'ru-to-en', reason: 'manual_retry' },
+          {
+            sessionId: session.sessionId,
+            idempotencyKey: recreateKey,
+            safetyIdentifier: owner
+          }
+        ),
+        (error: unknown) =>
+          error instanceof SessionServiceError && error.code === 'RESOURCE_NOT_FOUND'
+      );
+      assert.equal(broker.calls.length, 2);
+
+      const next = await service().create(
+        request,
+        createContext('99999999-9999-4999-8999-999999999999')
+      );
+      assert.notEqual(next.sessionId, session.sessionId);
+      assert.equal(broker.calls.length, 3);
+
+      const stored = await pool.query<{
+        completed_at: Date;
+        completion_result: string;
+        duration_seconds: number;
+        active_audio_seconds: number;
+        turns: number;
+        reconnects: number;
+        final_route_type: string;
+        completion_error_code: string | null;
+      }>(
+        `
+          SELECT completed_at, completion_result, duration_seconds, active_audio_seconds,
+                 turns, reconnects, final_route_type, completion_error_code
+          FROM translation_sessions
+          WHERE session_id = $1
+        `,
+        [session.sessionId]
+      );
+      const row = stored.rows[0]!;
+      assert.equal(row.completed_at.toISOString(), first.completedAt);
+      assert.ok(row.completion_result === 'user_stopped' || row.completion_result === 'failed');
+      assert.equal(row.duration_seconds, 45);
+      assert.equal(row.active_audio_seconds, 21);
+      assert.equal(row.turns, 4);
+      assert.equal(row.reconnects, 1);
+      assert.equal(row.final_route_type, 'bluetooth');
+      assert.ok(row.completion_error_code === null || row.completion_error_code === 'NETWORK');
+    } finally {
+      await pool.end();
+    }
+  }
+);

@@ -49,6 +49,36 @@ export interface TranslationSession {
   };
 }
 
+export type CompletionResult =
+  | 'completed'
+  | 'user_stopped'
+  | 'failed'
+  | 'killed_by_config';
+
+export type FinalRouteType =
+  | 'built_in'
+  | 'speaker'
+  | 'bluetooth'
+  | 'wired'
+  | 'usb'
+  | 'unknown';
+
+export interface CompleteTranslationSessionRequest {
+  result: CompletionResult;
+  durationSeconds: number;
+  activeAudioSeconds: number;
+  turns: number;
+  reconnects: number;
+  finalRouteType?: FinalRouteType | null;
+  errorCode?: string | null;
+}
+
+export interface CompleteTranslationSessionResponse {
+  sessionId: string;
+  status: 'completed';
+  completedAt: string;
+}
+
 export class SessionServiceError extends Error {
   constructor(
     readonly code:
@@ -87,6 +117,11 @@ export interface RecreateLegRequest {
 export interface RecreateLegContext {
   sessionId: string;
   idempotencyKey: string;
+  safetyIdentifier: string;
+}
+
+export interface CompleteSessionContext {
+  sessionId: string;
   safetyIdentifier: string;
 }
 
@@ -214,6 +249,30 @@ export class SessionService {
         },
         (session) => this.#createReplacementLeg(request.clientLegId, session)
       );
+    } catch (error) {
+      throw this.#mapRepositoryError(error);
+    }
+  }
+
+  async complete(
+    request: CompleteTranslationSessionRequest,
+    context: CompleteSessionContext
+  ): Promise<CompleteTranslationSessionResponse> {
+    try {
+      return await this.#repository.completeSession({
+        safetyIdentifier: context.safetyIdentifier,
+        sessionId: context.sessionId,
+        now: this.#now(),
+        completion: {
+          result: request.result,
+          durationSeconds: request.durationSeconds,
+          activeAudioSeconds: request.activeAudioSeconds,
+          turns: request.turns,
+          reconnects: request.reconnects,
+          finalRouteType: request.finalRouteType ?? null,
+          errorCode: request.errorCode ?? null
+        }
+      });
     } catch (error) {
       throw this.#mapRepositoryError(error);
     }

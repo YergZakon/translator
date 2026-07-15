@@ -1,5 +1,10 @@
-import type { TranslationLegCredentials, TranslationSession } from '../services/session-service.js';
+import type {
+  CompleteTranslationSessionResponse,
+  TranslationLegCredentials,
+  TranslationSession
+} from '../services/session-service.js';
 import {
+  type CompleteSessionPersistenceInput,
   type CreateSessionPersistenceInput,
   type CreatedSessionPersistenceResult,
   type RecreateLegPersistenceInput,
@@ -20,6 +25,7 @@ interface SessionRecord {
   activeUntil: Date;
   model: string;
   legs: Map<string, StoredSessionLeg>;
+  completion?: CompleteTranslationSessionResponse;
 }
 
 interface MintEvent {
@@ -105,7 +111,8 @@ export class InMemorySessionRepository implements SessionRepository {
     if (
       session === undefined ||
       session.safetyIdentifier !== input.safetyIdentifier ||
-      session.activeUntil.getTime() <= input.now.getTime()
+      session.activeUntil.getTime() <= input.now.getTime() ||
+      session.completion !== undefined
     ) {
       if (session !== undefined && session.activeUntil.getTime() <= input.now.getTime()) {
         this.#sessions.delete(input.sessionId);
@@ -159,13 +166,32 @@ export class InMemorySessionRepository implements SessionRepository {
     return quotaResult;
   }
 
+  completeSession(input: CompleteSessionPersistenceInput): Promise<CompleteTranslationSessionResponse> {
+    const session = this.#sessions.get(input.sessionId);
+    if (session === undefined || session.safetyIdentifier !== input.safetyIdentifier) {
+      throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
+    }
+    if (session.completion !== undefined) {
+      return Promise.resolve(session.completion);
+    }
+    const completion: CompleteTranslationSessionResponse = {
+      sessionId: input.sessionId,
+      status: 'completed',
+      completedAt: input.now.toISOString()
+    };
+    session.completion = completion;
+    return Promise.resolve(completion);
+  }
+
   #reserveQuota(input: CreateSessionPersistenceInput): QuotaRollback {
     this.#pruneExpiredSessions(input.now);
     const owner = input.safetyIdentifier;
     const reservation = input.quota;
     const activeSessions = [...this.#sessions.values()].filter(
       (session) =>
-        session.safetyIdentifier === owner && session.activeUntil.getTime() > input.now.getTime()
+        session.safetyIdentifier === owner &&
+        session.completion === undefined &&
+        session.activeUntil.getTime() > input.now.getTime()
     );
     const activeLegs = activeSessions.reduce((sum, session) => sum + session.legs.size, 0);
     const pendingLegs = this.#pendingActiveLegs.get(owner) ?? 0;
