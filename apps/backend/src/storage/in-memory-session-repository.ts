@@ -22,6 +22,15 @@ interface SessionRecord {
   legs: Map<string, StoredSessionLeg>;
 }
 
+interface MintEvent {
+  createdAt: Date;
+  secretMints: number;
+}
+
+interface QuotaRollback {
+  apply(): void;
+}
+
 export class InMemorySessionRepository implements SessionRepository {
   readonly #createIdempotency = new Map<string, IdempotencyEntry<TranslationSession>>();
   readonly #recreateIdempotency = new Map<
@@ -29,6 +38,9 @@ export class InMemorySessionRepository implements SessionRepository {
     IdempotencyEntry<TranslationLegCredentials>
   >();
   readonly #sessions = new Map<string, SessionRecord>();
+  readonly #dailyUsage = new Map<string, number>();
+  readonly #mintEvents = new Map<string, MintEvent[]>();
+  readonly #pendingActiveLegs = new Map<string, number>();
 
   createSession(
     input: CreateSessionPersistenceInput,
@@ -44,8 +56,9 @@ export class InMemorySessionRepository implements SessionRepository {
       this.#createIdempotency.delete(key);
     }
 
+    const quotaRollback = this.#reserveQuota(input);
     let expiresAt = new Date(0);
-    const result = create().then((created) => {
+    const result = Promise.resolve().then(create).then((created) => {
       expiresAt = new Date(created.session.expiresAt);
       this.#sessions.set(created.session.sessionId, {
         safetyIdentifier: input.safetyIdentifier,
@@ -62,6 +75,7 @@ export class InMemorySessionRepository implements SessionRepository {
           ])
         )
       });
+      this.#decrementPendingLegs(input.safetyIdentifier, input.quota.additionalActiveLegs);
       const current = this.#createIdempotency.get(key);
       if (current?.result === result) {
         current.expiresAt = expiresAt;
@@ -74,6 +88,7 @@ export class InMemorySessionRepository implements SessionRepository {
       result
     });
     void result.catch(() => {
+      quotaRollback.apply();
       const current = this.#createIdempotency.get(key);
       if (current?.result === result) {
         this.#createIdempotency.delete(key);
@@ -112,12 +127,16 @@ export class InMemorySessionRepository implements SessionRepository {
       this.#recreateIdempotency.delete(key);
     }
 
-    const result = create({
-      safetyIdentifier: session.safetyIdentifier,
-      activeUntil: session.activeUntil,
-      model: session.model,
-      leg
-    }).then((credentials) => {
+    const quotaRollback = this.#reserveQuota(input);
+    const result = Promise.resolve().then(() =>
+      create({
+        safetyIdentifier: session.safetyIdentifier,
+        activeUntil: session.activeUntil,
+        model: session.model,
+        leg
+      })
+    );
+    const quotaResult = result.then((credentials) => {
       session.legs.set(input.clientLegId, {
         clientLegId: input.clientLegId,
         legId: credentials.legId,
@@ -128,15 +147,116 @@ export class InMemorySessionRepository implements SessionRepository {
     this.#recreateIdempotency.set(key, {
       fingerprint: input.requestFingerprint,
       expiresAt: session.activeUntil,
-      result
+      result: quotaResult
     });
-    void result.catch(() => {
+    void quotaResult.catch(() => {
+      quotaRollback.apply();
       const current = this.#recreateIdempotency.get(key);
-      if (current?.result === result) {
+      if (current?.result === quotaResult) {
         this.#recreateIdempotency.delete(key);
       }
     });
-    return result;
+    return quotaResult;
+  }
+
+  #reserveQuota(input: CreateSessionPersistenceInput): QuotaRollback {
+    this.#pruneExpiredSessions(input.now);
+    const owner = input.safetyIdentifier;
+    const reservation = input.quota;
+    const activeSessions = [...this.#sessions.values()].filter(
+      (session) =>
+        session.safetyIdentifier === owner && session.activeUntil.getTime() > input.now.getTime()
+    );
+    const activeLegs = activeSessions.reduce((sum, session) => sum + session.legs.size, 0);
+    const pendingLegs = this.#pendingActiveLegs.get(owner) ?? 0;
+    if (
+      activeLegs + pendingLegs + reservation.additionalActiveLegs >
+      reservation.policy.maxParallelLegs
+    ) {
+      const earliest = activeSessions.reduce<number | null>(
+        (value, session) =>
+          value === null ? session.activeUntil.getTime() : Math.min(value, session.activeUntil.getTime()),
+        null
+      );
+      throw new SessionRepositoryError(
+        'RATE_LIMITED',
+        earliest === null
+          ? reservation.policy.secretMintWindowMs
+          : Math.max(1, earliest - input.now.getTime())
+      );
+    }
+
+    const quotaDate = input.now.toISOString().slice(0, 10);
+    const dailyKey = `${owner}:${quotaDate}`;
+    const dailyUsed = this.#dailyUsage.get(dailyKey) ?? 0;
+    if (dailyUsed + reservation.dailyLegMinutes > reservation.policy.maxDailyLegMinutes) {
+      const nextUtcDay = Date.UTC(
+        input.now.getUTCFullYear(),
+        input.now.getUTCMonth(),
+        input.now.getUTCDate() + 1
+      );
+      throw new SessionRepositoryError(
+        'RATE_LIMITED',
+        Math.min(3_600_000, Math.max(1, nextUtcDay - input.now.getTime()))
+      );
+    }
+
+    const windowStart = input.now.getTime() - reservation.policy.secretMintWindowMs;
+    const events = (this.#mintEvents.get(owner) ?? []).filter(
+      (event) => event.createdAt.getTime() > windowStart
+    );
+    this.#mintEvents.set(owner, events);
+    let usedMints = events.reduce((sum, event) => sum + event.secretMints, 0);
+    if (usedMints + reservation.secretMints > reservation.policy.maxSecretMintsPerWindow) {
+      let retryAfterMs = reservation.policy.secretMintWindowMs;
+      for (const event of events) {
+        usedMints -= event.secretMints;
+        retryAfterMs = Math.max(
+          1,
+          event.createdAt.getTime() + reservation.policy.secretMintWindowMs - input.now.getTime()
+        );
+        if (usedMints + reservation.secretMints <= reservation.policy.maxSecretMintsPerWindow) {
+          break;
+        }
+      }
+      throw new SessionRepositoryError('RATE_LIMITED', retryAfterMs);
+    }
+
+    const event = { createdAt: input.now, secretMints: reservation.secretMints };
+    events.push(event);
+    this.#dailyUsage.set(dailyKey, dailyUsed + reservation.dailyLegMinutes);
+    this.#pendingActiveLegs.set(owner, pendingLegs + reservation.additionalActiveLegs);
+    let active = true;
+    return {
+      apply: () => {
+        if (!active) return;
+        active = false;
+        const currentEvents = this.#mintEvents.get(owner);
+        if (currentEvents !== undefined) {
+          const index = currentEvents.indexOf(event);
+          if (index >= 0) currentEvents.splice(index, 1);
+        }
+        const remainingDaily = Math.max(
+          0,
+          (this.#dailyUsage.get(dailyKey) ?? 0) - reservation.dailyLegMinutes
+        );
+        if (remainingDaily === 0) this.#dailyUsage.delete(dailyKey);
+        else this.#dailyUsage.set(dailyKey, remainingDaily);
+        this.#decrementPendingLegs(owner, reservation.additionalActiveLegs);
+      }
+    };
+  }
+
+  #decrementPendingLegs(owner: string, count: number): void {
+    const remaining = Math.max(0, (this.#pendingActiveLegs.get(owner) ?? 0) - count);
+    if (remaining === 0) this.#pendingActiveLegs.delete(owner);
+    else this.#pendingActiveLegs.set(owner, remaining);
+  }
+
+  #pruneExpiredSessions(now: Date): void {
+    for (const [sessionId, session] of this.#sessions) {
+      if (session.activeUntil.getTime() <= now.getTime()) this.#sessions.delete(sessionId);
+    }
   }
 
   #assertFingerprint(stored: string, requested: string): void {

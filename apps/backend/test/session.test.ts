@@ -12,6 +12,7 @@ import {
   type SecretBroker,
   type TranslationSecret
 } from '../src/services/openai-secret-broker.js';
+import type { QuotaPolicy } from '../src/services/quota-service.js';
 
 const apps: FastifyInstance[] = [];
 const appToken = 'test-prototype-app-token';
@@ -45,7 +46,8 @@ function makeApp(
   broker: SecretBroker,
   killSwitch = false,
   now: () => Date = () => new Date(),
-  acceptedTokens: string[] = [appToken]
+  acceptedTokens: string[] = [appToken],
+  quotaPolicy?: QuotaPolicy
 ): FastifyInstance {
   let id = 0;
   const config = structuredClone(defaultAppConfig);
@@ -59,6 +61,7 @@ function makeApp(
       'test-safety-identifier-secret-32-characters'
     ),
     secretBroker: broker,
+    ...(quotaPolicy === undefined ? {} : { quotaPolicy }),
     now,
     sessionIdFactory: (prefix) => `${prefix}_${String(++id).padStart(24, 'a')}`
   });
@@ -231,6 +234,118 @@ test('POST /v1/translation-sessions rejects invalid app tokens before minting se
   assert.equal(response.statusCode, 401);
   assert.equal(response.json().error.code, 'INVALID_APP_TOKEN');
   assert.equal(broker.calls.length, 0);
+});
+
+test('session quota rejects a parallel leg before broker mint and preserves idempotent replay', async () => {
+  const broker = new RecordingBroker();
+  const current = new Date('2026-07-15T05:00:00.000Z');
+  const app = makeApp(broker, false, () => current, [appToken], {
+    maxParallelLegs: 1,
+    maxSecretMintsPerWindow: 10,
+    secretMintWindowMs: 60_000,
+    maxDailyLegMinutes: 120
+  });
+  const first = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const replay = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const limited = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers: { ...headers, 'idempotency-key': '0a8eeaf5-c52e-47c4-96c6-8279573e0815' },
+    payload: oneWayRequest
+  });
+
+  assert.equal(first.statusCode, 201);
+  assert.deepEqual(replay.json(), first.json());
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.json().error.code, 'RATE_LIMITED');
+  assert.equal(limited.json().error.retryable, true);
+  assert.equal(limited.json().error.retryAfterMs, 1_800_000);
+  assert.equal(broker.calls.length, 1);
+});
+
+test('daily leg-minute quota returns the UTC reset delay before broker mint', async () => {
+  const broker = new RecordingBroker();
+  let current = new Date('2026-07-15T05:00:00.000Z');
+  const app = makeApp(broker, false, () => current, [appToken], {
+    maxParallelLegs: 2,
+    maxSecretMintsPerWindow: 10,
+    secretMintWindowMs: 60_000,
+    maxDailyLegMinutes: 30
+  });
+  await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  current = new Date('2026-07-15T05:30:01.000Z');
+  const limited = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers: { ...headers, 'idempotency-key': '49a0cb10-ad3a-4853-bec7-aefc8b1929d3' },
+    payload: oneWayRequest
+  });
+
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.json().error.retryAfterMs, 3_600_000);
+  assert.equal(broker.calls.length, 1);
+});
+
+test('rolling mint quota applies to recreate and a broker failure rolls its reservation back', async () => {
+  let calls = 0;
+  const broker: SecretBroker = {
+    async createTranslationSecret(input) {
+      calls += 1;
+      if (calls === 1) {
+        throw new SecretBrokerError('SERVICE_UNAVAILABLE', 503, true, 500);
+      }
+      return {
+        value: `ek_quota_${input.targetLanguage}_${calls}_short_lived_secret`,
+        expiresAt: new Date('2099-07-15T06:00:00.000Z')
+      };
+    }
+  };
+  const current = new Date('2026-07-15T05:00:00.000Z');
+  const app = makeApp(broker, false, () => current, [appToken], {
+    maxParallelLegs: 2,
+    maxSecretMintsPerWindow: 1,
+    secretMintWindowMs: 60_000,
+    maxDailyLegMinutes: 120
+  });
+  const firstAttempt = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const limited = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  });
+
+  assert.equal(firstAttempt.statusCode, 503);
+  assert.equal(created.statusCode, 201);
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.json().error.retryAfterMs, 60_000);
+  assert.equal(calls, 2);
 });
 
 test('POST /v1/translation-sessions/{id}/legs creates fresh credentials for the original target', async () => {

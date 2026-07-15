@@ -8,6 +8,7 @@ import {
 import type { Pool, PoolClient } from 'pg';
 
 import type { TranslationLegCredentials, TranslationSession } from '../services/session-service.js';
+import type { QuotaReservation } from '../services/quota-service.js';
 import {
   type CreateSessionPersistenceInput,
   type CreatedSessionPersistenceResult,
@@ -40,6 +41,20 @@ interface EncryptedResponse {
   iv: Buffer;
   authTag: Buffer;
   ciphertext: Buffer;
+}
+
+interface ActiveLegQuotaRow {
+  active_legs: number;
+  earliest_active_until: Date | null;
+}
+
+interface DailyQuotaRow {
+  reserved_leg_minutes: number;
+}
+
+interface MintEventRow {
+  secret_mints: number;
+  created_at: Date;
 }
 
 export class PostgresSessionRepository implements SessionRepository {
@@ -78,6 +93,9 @@ export class PostgresSessionRepository implements SessionRepository {
         await client.query('COMMIT');
         return session;
       }
+
+      await this.#lockQuotaOwner(client, input.safetyIdentifier);
+      await this.#reserveQuota(client, operation, input.safetyIdentifier, input.now, input.quota);
 
       const created = await create();
       await client.query(
@@ -142,6 +160,25 @@ export class PostgresSessionRepository implements SessionRepository {
       await this.#pruneExpired(client, input.now);
       await this.#lockOperation(client, operation, input.safetyIdentifier, scopeId, input.idempotencyKey);
 
+      const existing = await this.#findIdempotency(
+        client,
+        operation,
+        input.safetyIdentifier,
+        scopeId,
+        input.idempotencyKey
+      );
+      if (existing !== null) {
+        this.#assertFingerprint(existing.request_fingerprint, input.requestFingerprint);
+        const credentials = this.#decrypt<TranslationLegCredentials>(
+          existing,
+          this.#aad(operation, input, scopeId)
+        );
+        await client.query('COMMIT');
+        return credentials;
+      }
+
+      await this.#lockQuotaOwner(client, input.safetyIdentifier);
+
       const stored = await client.query<StoredSessionRow>(
         `
           SELECT
@@ -166,22 +203,7 @@ export class PostgresSessionRepository implements SessionRepository {
         throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
       }
 
-      const existing = await this.#findIdempotency(
-        client,
-        operation,
-        input.safetyIdentifier,
-        scopeId,
-        input.idempotencyKey
-      );
-      if (existing !== null) {
-        this.#assertFingerprint(existing.request_fingerprint, input.requestFingerprint);
-        const credentials = this.#decrypt<TranslationLegCredentials>(
-          existing,
-          this.#aad(operation, input, scopeId)
-        );
-        await client.query('COMMIT');
-        return credentials;
-      }
+      await this.#reserveQuota(client, operation, input.safetyIdentifier, input.now, input.quota);
 
       const credentials = await create({
         safetyIdentifier: storedRow.owner_safety_identifier,
@@ -229,6 +251,152 @@ export class PostgresSessionRepository implements SessionRepository {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
       `${operation}:${owner}:${scopeId}:${idempotencyKey}`
     ]);
+  }
+
+  async #lockQuotaOwner(client: PoolClient, owner: string): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `translation-quota:${owner}`
+    ]);
+  }
+
+  async #reserveQuota(
+    client: PoolClient,
+    operation: Operation,
+    owner: string,
+    now: Date,
+    reservation: QuotaReservation
+  ): Promise<void> {
+    await this.#assertParallelLimit(client, owner, now, reservation);
+    await this.#assertDailyLimit(client, owner, now, reservation);
+    await this.#assertRateLimit(client, operation, owner, now, reservation);
+  }
+
+  async #assertParallelLimit(
+    client: PoolClient,
+    owner: string,
+    now: Date,
+    reservation: QuotaReservation
+  ): Promise<void> {
+    if (reservation.additionalActiveLegs === 0) return;
+    const result = await client.query<ActiveLegQuotaRow>(
+      `
+        SELECT
+          count(l.leg_id)::integer AS active_legs,
+          min(s.active_until) AS earliest_active_until
+        FROM translation_sessions AS s
+        JOIN translation_session_legs AS l ON l.session_id = s.session_id
+        WHERE s.owner_safety_identifier = $1
+          AND s.active_until > $2
+      `,
+      [owner, now]
+    );
+    const activeLegs = result.rows[0]?.active_legs ?? 0;
+    if (activeLegs + reservation.additionalActiveLegs <= reservation.policy.maxParallelLegs) {
+      return;
+    }
+    const retryAt = result.rows[0]?.earliest_active_until;
+    throw new SessionRepositoryError(
+      'RATE_LIMITED',
+      retryAt === null || retryAt === undefined
+        ? reservation.policy.secretMintWindowMs
+        : Math.max(1, retryAt.getTime() - now.getTime())
+    );
+  }
+
+  async #assertDailyLimit(
+    client: PoolClient,
+    owner: string,
+    now: Date,
+    reservation: QuotaReservation
+  ): Promise<void> {
+    if (reservation.dailyLegMinutes === 0) return;
+    const quotaDate = now.toISOString().slice(0, 10);
+    const result = await client.query<DailyQuotaRow>(
+      `
+        SELECT reserved_leg_minutes
+        FROM translation_quota_daily_usage
+        WHERE owner_safety_identifier = $1 AND quota_date = $2
+        FOR UPDATE
+      `,
+      [owner, quotaDate]
+    );
+    const used = result.rows[0]?.reserved_leg_minutes ?? 0;
+    if (used + reservation.dailyLegMinutes > reservation.policy.maxDailyLegMinutes) {
+      const nextUtcDay = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 1
+      );
+      throw new SessionRepositoryError(
+        'RATE_LIMITED',
+        Math.min(3_600_000, Math.max(1, nextUtcDay - now.getTime()))
+      );
+    }
+    await client.query(
+      `
+        INSERT INTO translation_quota_daily_usage (
+          owner_safety_identifier,
+          quota_date,
+          reserved_leg_minutes,
+          updated_at
+        ) VALUES ($1, $2, $3, $4)
+        ON CONFLICT (owner_safety_identifier, quota_date) DO UPDATE
+        SET reserved_leg_minutes = translation_quota_daily_usage.reserved_leg_minutes
+            + EXCLUDED.reserved_leg_minutes,
+            updated_at = EXCLUDED.updated_at
+      `,
+      [owner, quotaDate, reservation.dailyLegMinutes, now]
+    );
+  }
+
+  async #assertRateLimit(
+    client: PoolClient,
+    operation: Operation,
+    owner: string,
+    now: Date,
+    reservation: QuotaReservation
+  ): Promise<void> {
+    const windowStart = new Date(now.getTime() - reservation.policy.secretMintWindowMs);
+    await client.query(
+      `
+        DELETE FROM translation_quota_mint_events
+        WHERE owner_safety_identifier = $1 AND created_at <= $2
+      `,
+      [owner, windowStart]
+    );
+    const result = await client.query<MintEventRow>(
+      `
+        SELECT secret_mints, created_at
+        FROM translation_quota_mint_events
+        WHERE owner_safety_identifier = $1 AND created_at > $2
+        ORDER BY created_at, event_id
+      `,
+      [owner, windowStart]
+    );
+    let used = result.rows.reduce((sum, event) => sum + event.secret_mints, 0);
+    if (used + reservation.secretMints > reservation.policy.maxSecretMintsPerWindow) {
+      let retryAfterMs = reservation.policy.secretMintWindowMs;
+      for (const event of result.rows) {
+        used -= event.secret_mints;
+        retryAfterMs = Math.max(
+          1,
+          event.created_at.getTime() + reservation.policy.secretMintWindowMs - now.getTime()
+        );
+        if (used + reservation.secretMints <= reservation.policy.maxSecretMintsPerWindow) break;
+      }
+      throw new SessionRepositoryError('RATE_LIMITED', retryAfterMs);
+    }
+    await client.query(
+      `
+        INSERT INTO translation_quota_mint_events (
+          owner_safety_identifier,
+          operation,
+          secret_mints,
+          created_at
+        ) VALUES ($1, $2, $3, $4)
+      `,
+      [owner, operation, reservation.secretMints, now]
+    );
   }
 
   async #pruneExpired(client: PoolClient, now: Date): Promise<void> {
