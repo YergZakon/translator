@@ -16,21 +16,23 @@ export interface CreateSessionRequest {
   device: { osVersion: string; modelClass: 'phone' };
 }
 
+export interface TranslationLegCredentials {
+  legId: string;
+  clientLegId: string;
+  targetLanguage: TargetLanguage;
+  provider: 'openai';
+  model: string;
+  clientSecret: string;
+  expiresAt: string;
+  callsUrl: string;
+}
+
 export interface TranslationSession {
   sessionId: string;
   traceId: string;
   expiresAt: string;
   maxDurationSeconds: number;
-  legs: Array<{
-    legId: string;
-    clientLegId: string;
-    targetLanguage: TargetLanguage;
-    provider: 'openai';
-    model: string;
-    clientSecret: string;
-    expiresAt: string;
-    callsUrl: string;
-  }>;
+  legs: TranslationLegCredentials[];
   policy: {
     maxReconnectAttempts: number;
     reconnectBackoffMs: number[];
@@ -42,8 +44,8 @@ export interface TranslationSession {
 
 export class SessionServiceError extends Error {
   constructor(
-    readonly code: 'IDEMPOTENCY_CONFLICT' | 'UNSUPPORTED_CONFIGURATION',
-    readonly httpStatus: 409 | 422,
+    readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND' | 'UNSUPPORTED_CONFIGURATION',
+    readonly httpStatus: 404 | 409 | 422,
     readonly message: string
   ) {
     super(message);
@@ -61,6 +63,35 @@ export interface CreateSessionContext {
 interface IdempotencyEntry {
   fingerprint: string;
   result: Promise<TranslationSession>;
+}
+
+export type RecreateLegReason =
+  | 'connection_failed'
+  | 'disconnected_timeout'
+  | 'secret_expired'
+  | 'manual_retry';
+
+export interface RecreateLegRequest {
+  clientLegId: string;
+  reason: RecreateLegReason;
+}
+
+export interface RecreateLegContext {
+  sessionId: string;
+  idempotencyKey: string;
+  safetyIdentifier: string;
+}
+
+interface SessionRecord {
+  safetyIdentifier: string;
+  activeUntilMs: number;
+  model: string;
+  legs: Map<string, { legId: string; targetLanguage: TargetLanguage }>;
+}
+
+interface RecreateIdempotencyEntry {
+  fingerprint: string;
+  result: Promise<TranslationLegCredentials>;
 }
 
 function stableFingerprint(request: CreateSessionRequest): string {
@@ -119,19 +150,24 @@ export interface SessionServiceOptions {
   broker: SecretBroker;
   callsUrl?: string;
   idFactory?: (prefix: 'ts' | 'leg') => string;
+  now?: () => Date;
 }
 
 export class SessionService {
   readonly #broker: SecretBroker;
   readonly #callsUrl: string;
   readonly #idFactory: (prefix: 'ts' | 'leg') => string;
+  readonly #now: () => Date;
   readonly #idempotency = new Map<string, IdempotencyEntry>();
+  readonly #sessions = new Map<string, SessionRecord>();
+  readonly #recreateIdempotency = new Map<string, RecreateIdempotencyEntry>();
 
   constructor(options: SessionServiceOptions) {
     this.#broker = options.broker;
     this.#callsUrl = options.callsUrl ?? 'https://api.openai.com/v1/realtime/translations/calls';
     this.#idFactory =
       options.idFactory ?? ((prefix) => `${prefix}_${randomUUID().replaceAll('-', '')}`);
+    this.#now = options.now ?? (() => new Date());
   }
 
   create(request: CreateSessionRequest, context: CreateSessionContext): Promise<TranslationSession> {
@@ -175,6 +211,52 @@ export class SessionService {
     return result;
   }
 
+  recreateLeg(
+    request: RecreateLegRequest,
+    context: RecreateLegContext
+  ): Promise<TranslationLegCredentials> {
+    const session = this.#sessions.get(context.sessionId);
+    if (
+      session === undefined ||
+      session.safetyIdentifier !== context.safetyIdentifier ||
+      session.activeUntilMs <= this.#now().getTime()
+    ) {
+      if (session !== undefined && session.activeUntilMs <= this.#now().getTime()) {
+        this.#sessions.delete(context.sessionId);
+      }
+      throw new SessionServiceError('RESOURCE_NOT_FOUND', 404, 'Translation session was not found');
+    }
+
+    const leg = session.legs.get(request.clientLegId);
+    if (leg === undefined) {
+      throw new SessionServiceError('RESOURCE_NOT_FOUND', 404, 'Translation leg was not found');
+    }
+
+    const key = `${context.safetyIdentifier}:${context.sessionId}:${context.idempotencyKey}`;
+    const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');
+    const existing = this.#recreateIdempotency.get(key);
+    if (existing !== undefined) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new SessionServiceError(
+          'IDEMPOTENCY_CONFLICT',
+          409,
+          'Idempotency key was already used for a different request'
+        );
+      }
+      return existing.result;
+    }
+
+    const result = this.#createReplacementLeg(request.clientLegId, leg.targetLanguage, session);
+    this.#recreateIdempotency.set(key, { fingerprint, result });
+    void result.catch(() => {
+      const current = this.#recreateIdempotency.get(key);
+      if (current?.result === result) {
+        this.#recreateIdempotency.delete(key);
+      }
+    });
+    return result;
+  }
+
   async #createNew(
     request: CreateSessionRequest,
     context: CreateSessionContext
@@ -204,7 +286,7 @@ export class SessionService {
       credentials[0]!.expiresAt
     );
 
-    return {
+    const session = {
       sessionId: this.#idFactory('ts'),
       traceId: context.traceId,
       expiresAt: sessionExpiry,
@@ -218,5 +300,60 @@ export class SessionService {
         telemetrySampleRate: context.config.telemetrySampleRate
       }
     };
+    this.#storeSession(session, context.safetyIdentifier);
+    return session;
+  }
+
+  async #createReplacementLeg(
+    clientLegId: string,
+    targetLanguage: TargetLanguage,
+    session: SessionRecord
+  ): Promise<TranslationLegCredentials> {
+    const secret = await this.#broker.createTranslationSecret({
+      model: session.model,
+      targetLanguage,
+      safetyIdentifier: session.safetyIdentifier
+    });
+    const credentials = {
+      legId: this.#idFactory('leg'),
+      clientLegId,
+      targetLanguage,
+      provider: 'openai' as const,
+      model: session.model,
+      clientSecret: secret.value,
+      expiresAt: secret.expiresAt.toISOString(),
+      callsUrl: this.#callsUrl
+    };
+    session.legs.set(clientLegId, { legId: credentials.legId, targetLanguage });
+    return credentials;
+  }
+
+  #storeSession(session: TranslationSession, safetyIdentifier: string): void {
+    const activeUntilMs = this.#now().getTime() + session.maxDurationSeconds * 1000;
+    this.#sessions.set(session.sessionId, {
+      safetyIdentifier,
+      activeUntilMs,
+      model: session.legs[0]!.model,
+      legs: new Map(
+        session.legs.map((leg) => [
+          leg.clientLegId,
+          { legId: leg.legId, targetLanguage: leg.targetLanguage }
+        ])
+      )
+    });
+
+    const expiryTimer = setTimeout(() => {
+      const current = this.#sessions.get(session.sessionId);
+      if (current?.activeUntilMs === activeUntilMs) {
+        this.#sessions.delete(session.sessionId);
+      }
+      const prefix = `${safetyIdentifier}:${session.sessionId}:`;
+      for (const key of this.#recreateIdempotency.keys()) {
+        if (key.startsWith(prefix)) {
+          this.#recreateIdempotency.delete(key);
+        }
+      }
+    }, Math.min(session.maxDurationSeconds * 1000, 2_147_483_647));
+    expiryTimer.unref();
   }
 }
