@@ -32,6 +32,8 @@
 ## Автономный обмен
 
 - Codex отправляет `[AGENT_HANDOFF]`; Claude Code возвращает `[AGENT_RESULT]`; Codex подтверждает `[AGENT_ACK]`.
+- Единственный авторитетный рецензент — локальная Claude Code сессия владельца через `channel: local-claude-monitor`; cloud `claude[bot]` и GitHub Actions Claude не используются.
+- Новые handoff-комментарии не содержат `@claude`; облачные результаты игнорируются и не подтверждаются ACK.
 - Каждый блок содержит уникальный `id`, явные `sender` и `recipient`, target и exact head SHA.
 - GitHub account автора комментария является транспортом и не заменяет поле `sender`.
 - Повторная обработка одного `id/revision` запрещена.

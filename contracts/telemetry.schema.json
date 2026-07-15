@@ -381,7 +381,7 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["wrong_meaning", "wrong_number", "wrong_name", "omission", "latency", "audio_quality", "echo", "connection"]
+            "enum": ["wrong_meaning", "missing_content", "critical_entity", "latency", "audio_quality", "echo_loop", "connection", "ui", "other"]
           }
         }
       }
