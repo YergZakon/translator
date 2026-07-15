@@ -26,6 +26,10 @@ export class ConfigService {
 
   getActiveConfig(context: ConfigRequestContext): ActiveConfig {
     void context;
+    return this.getGlobalActiveConfig();
+  }
+
+  getGlobalActiveConfig(): ActiveConfig {
     return {
       config: structuredClone(this.#active.config),
       etag: this.#active.etag

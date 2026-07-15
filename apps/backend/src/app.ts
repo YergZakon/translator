@@ -14,9 +14,12 @@ import {
   createSessionRequestSchema,
   errorEnvelopeSchema,
   healthResponseSchema,
+  recreateTranslationLegParamsSchema,
+  recreateTranslationLegRequestSchema,
   registerInstallationHeadersSchema,
   registerInstallationRequestSchema,
   registerInstallationResponseSchema,
+  translationLegCredentialsSchema,
   translationSessionSchema
 } from './http/schemas.js';
 import { RepositoryTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
@@ -33,6 +36,7 @@ import {
 } from './services/openai-secret-broker.js';
 import {
   type CreateSessionRequest,
+  type RecreateLegRequest,
   SessionService,
   SessionServiceError
 } from './services/session-service.js';
@@ -58,6 +62,10 @@ interface ConfigHeaders {
 interface CreateSessionHeaders {
   authorization?: string;
   'idempotency-key': string;
+}
+
+interface RecreateTranslationLegParams {
+  sessionId: string;
 }
 
 export interface BuildAppOptions {
@@ -126,7 +134,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     ...(options.translationCallsUrl === undefined
       ? {}
       : { callsUrl: options.translationCallsUrl }),
-    ...(options.sessionIdFactory === undefined ? {} : { idFactory: options.sessionIdFactory })
+    ...(options.sessionIdFactory === undefined ? {} : { idFactory: options.sessionIdFactory }),
+    now
   });
 
   const app = Fastify({
@@ -314,6 +323,82 @@ export function buildApp(options: BuildAppOptions = {}) {
           const messages = {
             RATE_LIMITED: 'Translation session creation is rate limited',
             UPSTREAM_SESSION_UNAVAILABLE: 'Translation session is temporarily unavailable',
+            UPSTREAM_TIMEOUT: 'Translation provider timed out',
+            SERVICE_UNAVAILABLE: 'Translation service is unavailable'
+          } as const;
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            messages[error.code],
+            error.retryable,
+            error.retryAfterMs
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{
+    Params: RecreateTranslationLegParams;
+    Headers: CreateSessionHeaders;
+    Body: RecreateLegRequest;
+  }>(
+    '/v1/translation-sessions/:sessionId/legs',
+    {
+      schema: {
+        params: recreateTranslationLegParamsSchema,
+        headers: createSessionHeadersSchema,
+        body: recreateTranslationLegRequestSchema,
+        response: {
+          201: translationLegCredentialsSchema,
+          400: errorEnvelopeSchema,
+          401: errorEnvelopeSchema,
+          404: errorEnvelopeSchema,
+          409: errorEnvelopeSchema,
+          429: errorEnvelopeSchema,
+          502: errorEnvelopeSchema,
+          503: errorEnvelopeSchema,
+          504: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const identity = await tokenVerifier.authenticateAuthorizationHeader(
+        request.headers.authorization
+      );
+      if (identity === null) {
+        return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+      }
+
+      const active = configService.getGlobalActiveConfig();
+      if (active.config.killSwitch) {
+        return sendError(
+          request,
+          reply,
+          503,
+          'KILL_SWITCH_ACTIVE',
+          active.config.killSwitchMessage ?? 'Translation service is temporarily disabled'
+        );
+      }
+
+      try {
+        const credentials = await sessionService.recreateLeg(request.body, {
+          sessionId: request.params.sessionId,
+          idempotencyKey: request.headers['idempotency-key'],
+          safetyIdentifier: identity.safetyIdentifier
+        });
+        return reply.code(201).send(credentials);
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return sendError(request, reply, error.httpStatus, error.code, error.message);
+        }
+        if (error instanceof SecretBrokerError) {
+          const messages = {
+            RATE_LIMITED: 'Translation leg recreation is rate limited',
+            UPSTREAM_SESSION_UNAVAILABLE: 'Translation leg is temporarily unavailable',
             UPSTREAM_TIMEOUT: 'Translation provider timed out',
             SERVICE_UNAVAILABLE: 'Translation service is unavailable'
           } as const;

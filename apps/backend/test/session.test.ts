@@ -16,6 +16,7 @@ import {
 const apps: FastifyInstance[] = [];
 const appToken = 'test-prototype-app-token';
 const idempotencyKey = '8f5d6754-c57a-4a44-9f0d-02da2172c11f';
+const recreateIdempotencyKey = '6fd2aca3-1be3-462f-98ee-a297b3e4d7af';
 const headers = {
   authorization: `Bearer ${appToken}`,
   'idempotency-key': idempotencyKey
@@ -34,13 +35,18 @@ class RecordingBroker implements SecretBroker {
   async createTranslationSecret(input: CreateTranslationSecretInput): Promise<TranslationSecret> {
     this.calls.push(input);
     return {
-      value: `ek_mock_${input.targetLanguage}_short_lived_secret`,
+      value: `ek_mock_${input.targetLanguage}_${this.calls.length}_short_lived_secret`,
       expiresAt: new Date(input.targetLanguage === 'en' ? '2099-07-14T05:10:00Z' : '2099-07-14T05:09:30Z')
     };
   }
 }
 
-function makeApp(broker: SecretBroker, killSwitch = false): FastifyInstance {
+function makeApp(
+  broker: SecretBroker,
+  killSwitch = false,
+  now: () => Date = () => new Date(),
+  acceptedTokens: string[] = [appToken]
+): FastifyInstance {
   let id = 0;
   const config = structuredClone(defaultAppConfig);
   config.killSwitch = killSwitch;
@@ -49,10 +55,11 @@ function makeApp(broker: SecretBroker, killSwitch = false): FastifyInstance {
     serviceVersion: '0.1.0-test',
     appConfig: config,
     tokenVerifier: new StaticTokenVerifier(
-      [appToken],
+      acceptedTokens,
       'test-safety-identifier-secret-32-characters'
     ),
     secretBroker: broker,
+    now,
     sessionIdFactory: (prefix) => `${prefix}_${String(++id).padStart(24, 'a')}`
   });
   apps.push(app);
@@ -77,7 +84,7 @@ test('POST /v1/translation-sessions creates a contract-valid one-way session', a
   assert.match(body.sessionId, /^ts_[A-Za-z0-9]{20,40}$/);
   assert.match(body.traceId, /^tr_[A-Za-z0-9]{20,40}$/);
   assert.equal(body.expiresAt, '2099-07-14T05:10:00.000Z');
-  assert.equal(body.legs[0].clientSecret, 'ek_mock_en_short_lived_secret');
+  assert.equal(body.legs[0].clientSecret, 'ek_mock_en_1_short_lived_secret');
   assert.equal(
     body.legs[0].callsUrl,
     'https://api.openai.com/v1/realtime/translations/calls'
@@ -224,4 +231,219 @@ test('POST /v1/translation-sessions rejects invalid app tokens before minting se
   assert.equal(response.statusCode, 401);
   assert.equal(response.json().error.code, 'INVALID_APP_TOKEN');
   assert.equal(broker.calls.length, 0);
+});
+
+test('POST /v1/translation-sessions/{id}/legs creates fresh credentials for the original target', async () => {
+  const broker = new RecordingBroker();
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const originalLeg = created.json().legs[0];
+
+  const response = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(response.json().clientLegId, 'ru-to-en');
+  assert.equal(response.json().targetLanguage, 'en');
+  assert.notEqual(response.json().legId, originalLeg.legId);
+  assert.notEqual(response.json().clientSecret, originalLeg.clientSecret);
+  assert.equal(broker.calls.length, 2);
+  assert.equal(broker.calls[1]?.targetLanguage, 'en');
+  assert.equal(broker.calls[1]?.safetyIdentifier, broker.calls[0]?.safetyIdentifier);
+});
+
+test('POST /v1/translation-sessions/{id}/legs blocks recreation when kill switch is active', async () => {
+  const broker = new RecordingBroker();
+  const response = await makeApp(broker, true).inject({
+    method: 'POST',
+    url: '/v1/translation-sessions/ts_aaaaaaaaaaaaaaaaaaaaaaaa/legs',
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error.code, 'KILL_SWITCH_ACTIVE');
+  assert.equal(response.json().error.message, 'Pilot is paused');
+  assert.equal(broker.calls.length, 0);
+});
+
+test('leg recreation coalesces an idempotent retry without minting another secret', async () => {
+  const broker = new RecordingBroker();
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const request = {
+    method: 'POST' as const,
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'disconnected_timeout' }
+  };
+
+  const [first, second] = await Promise.all([app.inject(request), app.inject(request)]);
+
+  assert.equal(first.statusCode, 201);
+  assert.deepEqual(second.json(), first.json());
+  assert.equal(broker.calls.length, 2);
+});
+
+test('leg recreation rejects conflicting reuse of an idempotency key', async () => {
+  const broker = new RecordingBroker();
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const url = `/v1/translation-sessions/${created.json().sessionId}/legs`;
+  const recreateHeaders = { ...headers, 'idempotency-key': recreateIdempotencyKey };
+  await app.inject({
+    method: 'POST',
+    url,
+    headers: recreateHeaders,
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url,
+    headers: recreateHeaders,
+    payload: { clientLegId: 'ru-to-en', reason: 'manual_retry' }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error.code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(broker.calls.length, 2);
+});
+
+test('leg recreation hides sessions owned by another installation', async () => {
+  const broker = new RecordingBroker();
+  const otherToken = 'another-valid-app-token';
+  const app = makeApp(broker, false, () => new Date(), [appToken, otherToken]);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: {
+      authorization: `Bearer ${otherToken}`,
+      'idempotency-key': recreateIdempotencyKey
+    },
+    payload: { clientLegId: 'ru-to-en', reason: 'manual_retry' }
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.json().error.code, 'RESOURCE_NOT_FOUND');
+  assert.equal(broker.calls.length, 1);
+});
+
+test('leg recreation rejects an expired app session without minting a secret', async () => {
+  const broker = new RecordingBroker();
+  let current = new Date('2026-07-14T05:00:00Z');
+  const app = makeApp(broker, false, () => current);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  current = new Date('2026-07-14T05:30:01Z');
+
+  const response = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'secret_expired' }
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.equal(response.json().error.code, 'RESOURCE_NOT_FOUND');
+  assert.equal(broker.calls.length, 1);
+});
+
+test('leg recreation rejects an invalid app token before minting a replacement secret', async () => {
+  const broker = new RecordingBroker();
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: {
+      authorization: 'Bearer invalid',
+      'idempotency-key': recreateIdempotencyKey
+    },
+    payload: { clientLegId: 'ru-to-en', reason: 'manual_retry' }
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.json().error.code, 'INVALID_APP_TOKEN');
+  assert.equal(broker.calls.length, 1);
+});
+
+test('leg recreation maps sanitized upstream errors and allows retrying a failed key', async () => {
+  let calls = 0;
+  const broker: SecretBroker = {
+    async createTranslationSecret(input) {
+      calls += 1;
+      if (calls === 2) {
+        throw new SecretBrokerError('RATE_LIMITED', 429, true, 1500);
+      }
+      return {
+        value: `ek_mock_${input.targetLanguage}_${calls}_short_lived_secret`,
+        expiresAt: new Date('2099-07-14T05:10:00Z')
+      };
+    }
+  };
+  const app = makeApp(broker);
+  const created = await app.inject({
+    method: 'POST',
+    url: '/v1/translation-sessions',
+    headers,
+    payload: oneWayRequest
+  });
+  const request = {
+    method: 'POST' as const,
+    url: `/v1/translation-sessions/${created.json().sessionId}/legs`,
+    headers: { ...headers, 'idempotency-key': recreateIdempotencyKey },
+    payload: { clientLegId: 'ru-to-en', reason: 'connection_failed' }
+  };
+
+  const limited = await app.inject(request);
+  const retried = await app.inject(request);
+
+  assert.equal(limited.statusCode, 429);
+  assert.deepEqual(
+    {
+      code: limited.json().error.code,
+      retryable: limited.json().error.retryable,
+      retryAfterMs: limited.json().error.retryAfterMs
+    },
+    { code: 'RATE_LIMITED', retryable: true, retryAfterMs: 1500 }
+  );
+  assert.equal(retried.statusCode, 201);
+  assert.equal(calls, 3);
 });

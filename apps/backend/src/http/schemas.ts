@@ -208,7 +208,7 @@ const sessionPolicySchema = Type.Object(
   { additionalProperties: false }
 );
 
-const translationLegCredentialsSchema = Type.Object(
+export const translationLegCredentialsSchema = Type.Object(
   {
     legId: Type.String({ pattern: '^leg_[A-Za-z0-9]{20,40}$' }),
     clientLegId: Type.String({ pattern: '^[a-z0-9][a-z0-9-]{1,39}$' }),
@@ -230,6 +230,26 @@ export const translationSessionSchema = Type.Object(
     maxDurationSeconds: Type.Integer({ minimum: 60, maximum: 3600 }),
     legs: Type.Array(translationLegCredentialsSchema, { minItems: 1, maxItems: 2 }),
     policy: sessionPolicySchema
+  },
+  { additionalProperties: false }
+);
+
+export const recreateTranslationLegParamsSchema = Type.Object(
+  {
+    sessionId: Type.String({ pattern: '^ts_[A-Za-z0-9]{20,40}$' })
+  },
+  { additionalProperties: false }
+);
+
+export const recreateTranslationLegRequestSchema = Type.Object(
+  {
+    clientLegId: Type.String({ pattern: '^[a-z0-9][a-z0-9-]{1,39}$' }),
+    reason: Type.Union([
+      Type.Literal('connection_failed'),
+      Type.Literal('disconnected_timeout'),
+      Type.Literal('secret_expired'),
+      Type.Literal('manual_retry')
+    ])
   },
   { additionalProperties: false }
 );
