@@ -9,99 +9,84 @@ struct PreflightView: View {
     @State private var audioRouteChecked = false
     @State private var isChecking = true
 
+    private let strings = EasyTalkStrings.current
+
     var body: some View {
-        ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+        VStack(spacing: 0) {
+            Text(strings.connecting)
+                .font(.easyTalk(24, .bold))
+                .foregroundColor(EasyTalk.fg)
+                .padding(.top, 40)
 
-            VStack(spacing: 30) {
-                Text("Подготовка Окружения")
-                    .font(.system(.title, design: .rounded))
-                    .fontWeight(.bold)
-                    .padding(.top, 40)
+            VStack(spacing: 0) {
+                checkRow(
+                    done: micPermissionGranted,
+                    title: strings.micPerm,
+                    subtitle: micPermissionGranted ? "✓" : "…"
+                )
+                Rectangle().fill(EasyTalk.stroke).frame(height: 1)
+                checkRow(
+                    done: networkChecked,
+                    title: strings.connection,
+                    subtitle: networkChecked ? strings.connected : "…"
+                )
+                Rectangle().fill(EasyTalk.stroke).frame(height: 1)
+                checkRow(
+                    done: audioRouteChecked,
+                    title: "Audio",
+                    subtitle: container.audioController.currentRoute
+                )
+            }
+            .easyTalkCard()
+            .padding(.horizontal, 26)
+            .padding(.top, 30)
 
-                VStack(spacing: 20) {
-                    // Check item 1
-                    HStack {
-                        Image(systemName: micPermissionGranted ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(micPermissionGranted ? .green : .secondary)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Разрешение микрофона")
-                                .fontWeight(.medium)
-                            Text(micPermissionGranted ? "Доступ предоставлен" : "Ожидание доступа...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
+            Spacer()
 
-                    // Check item 2
-                    HStack {
-                        Image(systemName: networkChecked ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(networkChecked ? .green : .secondary)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Подключение к интернету")
-                                .fontWeight(.medium)
-                            Text(networkChecked ? "Соединение стабильное" : "Проверка сети...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
-
-                    // Check item 3
-                    HStack {
-                        Image(systemName: audioRouteChecked ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(audioRouteChecked ? .green : .secondary)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Аудиомаршрут")
-                                .fontWeight(.medium)
-                            Text("Выход: \(container.audioController.currentRoute)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
+            if isChecking {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .tint(EasyTalk.accent)
+                    Text(strings.connectingSub)
+                        .font(.easyTalk(12))
+                        .foregroundColor(EasyTalk.fg2)
                 }
-                .padding(24)
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(18)
-                .padding(.horizontal)
-
-                Spacer()
-
-                if isChecking {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Проверяем доступность сервисов...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                } else {
-                    Button(action: {
-                        isConfirmed = true
-                    }) {
-                        Text("Начать перевод")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(14)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 40)
-                    .accessibilityLabel("Начать сессию перевода")
+                .padding(.bottom, 40)
+            } else {
+                Button(action: { isConfirmed = true }) {
+                    Text(strings.startBtn)
                 }
+                .buttonStyle(EasyTalkPrimaryButtonStyle())
+                .padding(.horizontal, 26)
+                .padding(.bottom, 40)
+                .accessibilityLabel(strings.startBtn)
             }
         }
         .onAppear {
             runPreflightChecks()
         }
+    }
+
+    private func checkRow(done: Bool, title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20))
+                .foregroundColor(done ? EasyTalk.english : EasyTalk.fg3)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.easyTalk(14, .medium))
+                    .foregroundColor(EasyTalk.fg)
+                Text(subtitle)
+                    .font(.easyTalk(12))
+                    .foregroundColor(EasyTalk.fg2)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(subtitle)")
     }
 
     private func runPreflightChecks() {
