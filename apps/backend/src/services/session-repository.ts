@@ -5,6 +5,7 @@ import type {
   TranslationLegCredentials,
   TranslationSession
 } from './session-service.js';
+import type { QuotaReservation } from './quota-service.js';
 
 export interface StoredSessionLeg {
   clientLegId: string;
@@ -24,6 +25,7 @@ export interface CreateSessionPersistenceInput {
   idempotencyKey: string;
   requestFingerprint: string;
   now: Date;
+  quota: QuotaReservation;
 }
 
 export interface CreatedSessionPersistenceResult {
@@ -37,7 +39,10 @@ export interface RecreateLegPersistenceInput extends CreateSessionPersistenceInp
 }
 
 export class SessionRepositoryError extends Error {
-  constructor(readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND') {
+  constructor(
+    readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND' | 'RATE_LIMITED',
+    readonly retryAfterMs?: number
+  ) {
     super(code);
     this.name = 'SessionRepositoryError';
   }

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { AppConfig } from '../domain/app-config.js';
 import { InMemorySessionRepository } from '../storage/in-memory-session-repository.js';
 import type { SecretBroker, TargetLanguage } from './openai-secret-broker.js';
+import { QuotaService, type QuotaPolicy } from './quota-service.js';
 import {
   type SessionRepository,
   SessionRepositoryError,
@@ -50,9 +51,15 @@ export interface TranslationSession {
 
 export class SessionServiceError extends Error {
   constructor(
-    readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND' | 'UNSUPPORTED_CONFIGURATION',
-    readonly httpStatus: 404 | 409 | 422,
-    readonly message: string
+    readonly code:
+      | 'IDEMPOTENCY_CONFLICT'
+      | 'RESOURCE_NOT_FOUND'
+      | 'UNSUPPORTED_CONFIGURATION'
+      | 'RATE_LIMITED',
+    readonly httpStatus: 404 | 409 | 422 | 429,
+    readonly message: string,
+    readonly retryable = false,
+    readonly retryAfterMs?: number
   ) {
     super(message);
     this.name = 'SessionServiceError';
@@ -141,6 +148,7 @@ export interface SessionServiceOptions {
   callsUrl?: string;
   idFactory?: (prefix: 'ts' | 'leg') => string;
   now?: () => Date;
+  quotaPolicy?: QuotaPolicy;
 }
 
 export class SessionService {
@@ -149,6 +157,7 @@ export class SessionService {
   readonly #idFactory: (prefix: 'ts' | 'leg') => string;
   readonly #now: () => Date;
   readonly #repository: SessionRepository;
+  readonly #quotaService: QuotaService;
 
   constructor(options: SessionServiceOptions) {
     this.#broker = options.broker;
@@ -157,6 +166,7 @@ export class SessionService {
     this.#idFactory =
       options.idFactory ?? ((prefix) => `${prefix}_${randomUUID().replaceAll('-', '')}`);
     this.#now = options.now ?? (() => new Date());
+    this.#quotaService = new QuotaService(options.quotaPolicy);
   }
 
   async create(
@@ -164,15 +174,20 @@ export class SessionService {
     context: CreateSessionContext
   ): Promise<TranslationSession> {
     validateRequest(request, context.config);
+    const now = this.#now();
     try {
       return await this.#repository.createSession(
         {
           safetyIdentifier: context.safetyIdentifier,
           idempotencyKey: context.idempotencyKey,
           requestFingerprint: stableFingerprint(request),
-          now: this.#now()
+          now,
+          quota: this.#quotaService.createSessionReservation(
+            request.legs.length,
+            context.config.maxDurationSeconds
+          )
         },
-        () => this.#createNew(request, context)
+        () => this.#createNew(request, context, now)
       );
     } catch (error) {
       throw this.#mapRepositoryError(error);
@@ -183,6 +198,7 @@ export class SessionService {
     request: RecreateLegRequest,
     context: RecreateLegContext
   ): Promise<TranslationLegCredentials> {
+    const now = this.#now();
     try {
       return await this.#repository.recreateLeg(
         {
@@ -193,7 +209,8 @@ export class SessionService {
           requestFingerprint: createHash('sha256')
             .update(JSON.stringify(request))
             .digest('hex'),
-          now: this.#now()
+          now,
+          quota: this.#quotaService.recreateLegReservation()
         },
         (session) => this.#createReplacementLeg(request.clientLegId, session)
       );
@@ -204,7 +221,8 @@ export class SessionService {
 
   async #createNew(
     request: CreateSessionRequest,
-    context: CreateSessionContext
+    context: CreateSessionContext,
+    now: Date
   ): Promise<{ session: TranslationSession; activeUntil: Date }> {
     const credentials = await Promise.all(
       request.legs.map(async (requestedLeg) => {
@@ -247,7 +265,7 @@ export class SessionService {
     };
     return {
       session,
-      activeUntil: new Date(this.#now().getTime() + session.maxDurationSeconds * 1000)
+      activeUntil: new Date(now.getTime() + session.maxDurationSeconds * 1000)
     };
   }
 
@@ -282,6 +300,15 @@ export class SessionService {
         'IDEMPOTENCY_CONFLICT',
         409,
         'Idempotency key was already used for a different request'
+      );
+    }
+    if (error.code === 'RATE_LIMITED') {
+      return new SessionServiceError(
+        'RATE_LIMITED',
+        429,
+        'Translation quota is temporarily exceeded',
+        true,
+        error.retryAfterMs
       );
     }
     return new SessionServiceError('RESOURCE_NOT_FOUND', 404, 'Translation session was not found');

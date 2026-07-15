@@ -30,6 +30,12 @@ async function main(): Promise<void> {
         apiKey: runtime.openAIAPIKey,
         requestTimeoutMs: runtime.openAIRequestTimeoutMs
       }),
+      quotaPolicy: {
+        maxParallelLegs: runtime.quotaMaxParallelLegs,
+        maxSecretMintsPerWindow: runtime.quotaSecretMintsPerMinute,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: runtime.quotaDailyLegMinutes
+      },
       logger: { level: runtime.logLevel }
     });
 

@@ -8,6 +8,9 @@ export interface RuntimeConfig {
   safetyIdentifierSecret: string;
   openAIAPIKey: string;
   openAIRequestTimeoutMs: number;
+  quotaMaxParallelLegs: number;
+  quotaSecretMintsPerMinute: number;
+  quotaDailyLegMinutes: number;
 }
 
 function positiveInteger(
@@ -53,6 +56,24 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     databasePoolMax: positiveInteger('DATABASE_POOL_MAX', env.DATABASE_POOL_MAX, 10, 100),
     safetyIdentifierSecret,
     openAIAPIKey,
-    openAIRequestTimeoutMs
+    openAIRequestTimeoutMs,
+    quotaMaxParallelLegs: positiveInteger(
+      'QUOTA_MAX_PARALLEL_LEGS',
+      env.QUOTA_MAX_PARALLEL_LEGS,
+      2,
+      20
+    ),
+    quotaSecretMintsPerMinute: positiveInteger(
+      'QUOTA_SECRET_MINTS_PER_MINUTE',
+      env.QUOTA_SECRET_MINTS_PER_MINUTE,
+      8,
+      1000
+    ),
+    quotaDailyLegMinutes: positiveInteger(
+      'QUOTA_DAILY_LEG_MINUTES',
+      env.QUOTA_DAILY_LEG_MINUTES,
+      120,
+      100000
+    )
   };
 }

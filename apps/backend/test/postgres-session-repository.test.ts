@@ -53,7 +53,7 @@ test(
     try {
       await runMigrations(pool);
       await pool.query(
-        'TRUNCATE TABLE translation_session_idempotency, translation_session_legs, translation_sessions'
+        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
       );
 
       const broker = new RecordingBroker();
@@ -183,6 +183,173 @@ test(
         `
       );
       assert.equal(secretColumns.rows[0]?.count, 0);
+    } finally {
+      await pool.end();
+    }
+  }
+);
+
+test(
+  'PostgreSQL atomically enforces parallel, rate, and daily quota before broker mint',
+  { skip: databaseUrl === undefined ? 'TEST_DATABASE_URL is not configured' : false },
+  async () => {
+    const pool = new Pool({ connectionString: databaseUrl });
+    try {
+      await runMigrations(pool);
+      await pool.query(
+        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
+      );
+
+      let sequence = 0;
+      let current = new Date('2026-07-15T05:00:00.000Z');
+      const broker = new (class implements SecretBroker {
+        readonly calls: CreateTranslationSecretInput[] = [];
+        failNext = false;
+
+        async createTranslationSecret(
+          input: CreateTranslationSecretInput
+        ): Promise<TranslationSecret> {
+          this.calls.push(input);
+          if (this.failNext) {
+            this.failNext = false;
+            throw new Error('synthetic broker failure');
+          }
+          return {
+            value: `ek_quota_pg_${String(this.calls.length).padStart(2, '0')}_short_lived_secret`,
+            expiresAt: new Date(current.getTime() + 10 * 60 * 1000)
+          };
+        }
+      })();
+      const service = (safetyIdentifier: string, policy: {
+        maxParallelLegs: number;
+        maxSecretMintsPerWindow: number;
+        secretMintWindowMs: number;
+        maxDailyLegMinutes: number;
+      }) =>
+        new SessionService({
+          broker,
+          repository: new PostgresSessionRepository(pool, encryptionSecret),
+          now: () => current,
+          quotaPolicy: policy,
+          idFactory: (prefix) => `${prefix}_${String(++sequence).padStart(24, 'q')}`
+        });
+      const context = (safetyIdentifier: string, key: string) => ({
+        idempotencyKey: key,
+        safetyIdentifier,
+        traceId: 'tr_qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        config: structuredClone(defaultAppConfig)
+      });
+      const parallelOwner = 'inst_11111111111111111111111111111111';
+      const parallelPolicy = {
+        maxParallelLegs: 1,
+        maxSecretMintsPerWindow: 10,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: 120
+      };
+      const firstKey = '11111111-1111-4111-8111-111111111111';
+      const secondKey = '22222222-2222-4222-8222-222222222222';
+      const concurrent = await Promise.allSettled([
+        service(parallelOwner, parallelPolicy).create(request, context(parallelOwner, firstKey)),
+        service(parallelOwner, parallelPolicy).create(request, context(parallelOwner, secondKey))
+      ]);
+      assert.equal(concurrent.filter((result) => result.status === 'fulfilled').length, 1);
+      const parallelFailure = concurrent.find((result) => result.status === 'rejected');
+      assert.ok(parallelFailure?.status === 'rejected');
+      assert.ok(parallelFailure.reason instanceof SessionServiceError);
+      assert.equal(parallelFailure.reason.code, 'RATE_LIMITED');
+      assert.equal(parallelFailure.reason.retryAfterMs, 1_800_000);
+      assert.equal(broker.calls.length, 1);
+
+      const acceptedKey = concurrent[0]?.status === 'fulfilled' ? firstKey : secondKey;
+      const accepted = concurrent.find((result) => result.status === 'fulfilled');
+      assert.ok(accepted?.status === 'fulfilled');
+      assert.deepEqual(
+        await service(parallelOwner, parallelPolicy).create(
+          request,
+          context(parallelOwner, acceptedKey)
+        ),
+        accepted.value
+      );
+      assert.equal(broker.calls.length, 1);
+
+      const rateOwner = 'inst_22222222222222222222222222222222';
+      const ratePolicy = {
+        maxParallelLegs: 2,
+        maxSecretMintsPerWindow: 1,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: 120
+      };
+      const rateSession = await service(rateOwner, ratePolicy).create(
+        request,
+        context(rateOwner, '33333333-3333-4333-8333-333333333333')
+      );
+      await assert.rejects(
+        service(rateOwner, ratePolicy).recreateLeg(
+          { clientLegId: 'ru-to-en', reason: 'connection_failed' },
+          {
+            sessionId: rateSession.sessionId,
+            idempotencyKey: '44444444-4444-4444-8444-444444444444',
+            safetyIdentifier: rateOwner
+          }
+        ),
+        (error: unknown) =>
+          error instanceof SessionServiceError &&
+          error.code === 'RATE_LIMITED' &&
+          error.retryAfterMs === 60_000
+      );
+
+      const dailyOwner = 'inst_33333333333333333333333333333333';
+      const dailyPolicy = {
+        maxParallelLegs: 2,
+        maxSecretMintsPerWindow: 10,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: 30
+      };
+      await service(dailyOwner, dailyPolicy).create(
+        request,
+        context(dailyOwner, '55555555-5555-4555-8555-555555555555')
+      );
+      current = new Date('2026-07-15T05:30:01.000Z');
+      await assert.rejects(
+        service(dailyOwner, dailyPolicy).create(
+          request,
+          context(dailyOwner, '66666666-6666-4666-8666-666666666666')
+        ),
+        (error: unknown) =>
+          error instanceof SessionServiceError &&
+          error.code === 'RATE_LIMITED' &&
+          error.retryAfterMs === 3_600_000
+      );
+
+      const rollbackOwner = 'inst_44444444444444444444444444444444';
+      const rollbackPolicy = {
+        maxParallelLegs: 1,
+        maxSecretMintsPerWindow: 1,
+        secretMintWindowMs: 60_000,
+        maxDailyLegMinutes: 30
+      };
+      broker.failNext = true;
+      const rollbackContext = context(
+        rollbackOwner,
+        '77777777-7777-4777-8777-777777777777'
+      );
+      await assert.rejects(service(rollbackOwner, rollbackPolicy).create(request, rollbackContext));
+      await service(rollbackOwner, rollbackPolicy).create(request, rollbackContext);
+
+      const usage = await pool.query<{
+        daily_rows: number;
+        mint_total: number;
+      }>(
+        `
+          SELECT
+            (SELECT count(*)::integer FROM translation_quota_daily_usage
+              WHERE owner_safety_identifier = $1) AS daily_rows,
+            (SELECT coalesce(sum(secret_mints), 0)::integer FROM translation_quota_mint_events
+              WHERE owner_safety_identifier = $1) AS mint_total
+        `,
+        [rollbackOwner]
+      );
+      assert.deepEqual(usage.rows[0], { daily_rows: 1, mint_total: 1 });
     } finally {
       await pool.end();
     }

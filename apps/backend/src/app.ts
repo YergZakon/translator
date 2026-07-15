@@ -41,6 +41,7 @@ import {
   SessionServiceError
 } from './services/session-service.js';
 import type { SessionRepository } from './services/session-repository.js';
+import type { QuotaPolicy } from './services/quota-service.js';
 import { InMemoryInstallationRepository } from './storage/in-memory-installation-repository.js';
 
 interface RegisterInstallationHeaders {
@@ -83,6 +84,7 @@ export interface BuildAppOptions {
   sessionRepository?: SessionRepository;
   translationCallsUrl?: string;
   sessionIdFactory?: (prefix: 'ts' | 'leg') => string;
+  quotaPolicy?: QuotaPolicy;
   logger?: FastifyServerOptions['logger'];
 }
 
@@ -140,6 +142,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       ? {}
       : { callsUrl: options.translationCallsUrl }),
     ...(options.sessionIdFactory === undefined ? {} : { idFactory: options.sessionIdFactory }),
+    ...(options.quotaPolicy === undefined ? {} : { quotaPolicy: options.quotaPolicy }),
     now
   });
 
@@ -322,7 +325,15 @@ export function buildApp(options: BuildAppOptions = {}) {
         return reply.code(201).send(session);
       } catch (error) {
         if (error instanceof SessionServiceError) {
-          return sendError(request, reply, error.httpStatus, error.code, error.message);
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            error.message,
+            error.retryable,
+            error.retryAfterMs
+          );
         }
         if (error instanceof SecretBrokerError) {
           const messages = {
@@ -398,7 +409,15 @@ export function buildApp(options: BuildAppOptions = {}) {
         return reply.code(201).send(credentials);
       } catch (error) {
         if (error instanceof SessionServiceError) {
-          return sendError(request, reply, error.httpStatus, error.code, error.message);
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            error.message,
+            error.retryable,
+            error.retryAfterMs
+          );
         }
         if (error instanceof SecretBrokerError) {
           const messages = {
