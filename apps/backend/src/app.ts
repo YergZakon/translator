@@ -23,9 +23,11 @@ import {
   registerInstallationHeadersSchema,
   registerInstallationRequestSchema,
   registerInstallationResponseSchema,
+  telemetryBatchResponseSchema,
   translationLegCredentialsSchema,
   translationSessionSchema
 } from './http/schemas.js';
+import { telemetryBatchRequestSchema } from './http/telemetry-schema.js';
 import { RepositoryTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
 import { ConfigService } from './services/config-service.js';
 import {
@@ -52,8 +54,14 @@ import {
 } from './services/session-service.js';
 import type { SessionRepository } from './services/session-repository.js';
 import type { QuotaPolicy } from './services/quota-service.js';
+import {
+  TelemetryService,
+  type TelemetryBatchRequest,
+  type TelemetryRepository
+} from './services/telemetry-service.js';
 import { InMemoryInstallationRepository } from './storage/in-memory-installation-repository.js';
 import { InMemorySessionRepository } from './storage/in-memory-session-repository.js';
+import { InMemoryTelemetryRepository } from './storage/in-memory-telemetry-repository.js';
 
 interface RegisterInstallationHeaders {
   'x-app-attestation'?: string;
@@ -97,6 +105,7 @@ export interface BuildAppOptions {
   appConfig?: AppConfig;
   secretBroker?: SecretBroker;
   sessionRepository?: SessionRepository;
+  telemetryRepository?: TelemetryRepository;
   translationCallsUrl?: string;
   sessionIdFactory?: (prefix: 'ts' | 'leg') => string;
   quotaPolicy?: QuotaPolicy;
@@ -160,6 +169,10 @@ export function buildApp(options: BuildAppOptions = {}) {
     now
   });
   const feedbackService = new FeedbackService(sessionRepository, now);
+  const telemetryService = new TelemetryService(
+    options.telemetryRepository ?? new InMemoryTelemetryRepository(),
+    now
+  );
 
   const app = Fastify({
     logger: options.logger ?? false,
@@ -172,6 +185,16 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   app.setErrorHandler((error, request, reply) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'statusCode' in error &&
+      error.statusCode === 413
+    ) {
+      sendError(request, reply, 413, 'PAYLOAD_TOO_LARGE', 'Request payload is too large');
+      return;
+    }
+
     if (typeof error === 'object' && error !== null && 'validation' in error) {
       sendError(request, reply, 400, 'INVALID_REQUEST', 'Request validation failed');
       return;
@@ -554,6 +577,37 @@ export function buildApp(options: BuildAppOptions = {}) {
         }
         throw error;
       }
+    }
+  );
+
+  app.post<{
+    Headers: AuthorizationHeaders;
+    Body: TelemetryBatchRequest;
+  }>(
+    '/v1/telemetry/batch',
+    {
+      bodyLimit: 256 * 1024,
+      schema: {
+        body: telemetryBatchRequestSchema,
+        response: {
+          202: telemetryBatchResponseSchema,
+          400: errorEnvelopeSchema,
+          401: errorEnvelopeSchema,
+          413: errorEnvelopeSchema,
+          429: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const identity = await tokenVerifier.authenticateAuthorizationHeader(
+        request.headers.authorization
+      );
+      if (identity === null) {
+        return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+      }
+
+      const result = await telemetryService.ingest(request.body, identity);
+      return reply.code(202).send(result);
     }
   );
 

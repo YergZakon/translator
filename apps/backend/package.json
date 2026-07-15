@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "test": "tsx --test --test-concurrency=1 test/app.test.ts test/feedback.test.ts test/installation-service.test.ts test/postgres-feedback-repository.test.ts test/postgres-installation-repository.test.ts test/postgres-session-repository.test.ts test/runtime-config.test.ts test/openai-secret-broker.test.ts test/session.test.ts test/telemetry-contract.test.ts",
+    "test": "tsx --test --test-concurrency=1 test/app.test.ts test/feedback.test.ts test/installation-service.test.ts test/postgres-feedback-repository.test.ts test/postgres-installation-repository.test.ts test/postgres-session-repository.test.ts test/postgres-telemetry-repository.test.ts test/runtime-config.test.ts test/openai-secret-broker.test.ts test/session.test.ts test/telemetry-contract.test.ts test/telemetry.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
