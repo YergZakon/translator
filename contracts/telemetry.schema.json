@@ -1,0 +1,390 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://translator.example/contracts/telemetry.schema.json",
+  "title": "Telemetry batch request v1",
+  "description": "Closed, privacy-preserving allowlist for technical client telemetry. Raw audio, transcript text, SDP, headers, URLs, secrets and arbitrary free-form properties are not accepted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sentAt", "events"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "sentAt": { "type": "string", "format": "date-time" },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/definitions/eventEnvelope" }
+    }
+  },
+  "definitions": {
+    "sessionId": {
+      "type": "string",
+      "pattern": "^ts_[A-Za-z0-9]{20,40}$"
+    },
+    "legId": {
+      "type": "string",
+      "pattern": "^leg_[A-Za-z0-9]{20,40}$"
+    },
+    "traceId": {
+      "type": "string",
+      "pattern": "^tr_[A-Za-z0-9]{20,40}$"
+    },
+    "measurementQuality": {
+      "type": "string",
+      "enum": ["exact", "proxy", "unavailable"]
+    },
+    "routeType": {
+      "type": "string",
+      "enum": ["built_in", "speaker", "receiver", "bluetooth", "wired", "usb", "other", "unknown"]
+    },
+    "eventEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventId", "type", "monotonicMs", "properties"],
+      "properties": {
+        "eventId": { "type": "string", "format": "uuid" },
+        "sessionId": {
+          "oneOf": [
+            { "$ref": "#/definitions/sessionId" },
+            { "type": "null" }
+          ]
+        },
+        "legId": {
+          "oneOf": [
+            { "$ref": "#/definitions/legId" },
+            { "type": "null" }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "app_opened",
+            "session_start_tapped",
+            "session_create_requested",
+            "session_secret_received",
+            "webrtc_offer_created",
+            "webrtc_connected",
+            "mic_enabled_changed",
+            "first_input_transcript",
+            "first_output_transcript",
+            "first_remote_audio",
+            "network_degraded",
+            "reconnect_attempt",
+            "reconnect_result",
+            "audio_route_changed",
+            "session_completed",
+            "feedback_submitted"
+          ]
+        },
+        "monotonicMs": { "type": "integer", "minimum": 0 },
+        "properties": { "type": "object", "maxProperties": 20 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "app_opened" } } },
+          "then": { "properties": { "properties": { "$ref": "#/definitions/appOpenedProperties" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "session_start_tapped" } } },
+          "then": { "properties": { "properties": { "$ref": "#/definitions/sessionStartTappedProperties" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "session_create_requested" } } },
+          "then": { "properties": { "properties": { "$ref": "#/definitions/sessionCreateRequestedProperties" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "session_secret_received" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/sessionSecretReceivedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "webrtc_offer_created" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/webrtcOfferCreatedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "webrtc_connected" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/webrtcConnectedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "mic_enabled_changed" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/micEnabledChangedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "first_input_transcript" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/firstTranscriptProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "first_output_transcript" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/firstTranscriptProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "first_remote_audio" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/firstRemoteAudioProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "network_degraded" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/networkDegradedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "reconnect_attempt" } } },
+          "then": {
+            "required": ["sessionId", "legId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "legId": { "$ref": "#/definitions/legId" },
+              "properties": { "$ref": "#/definitions/reconnectAttemptProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "reconnect_result" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/reconnectResultProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "audio_route_changed" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/audioRouteChangedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "session_completed" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/sessionCompletedProperties" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "feedback_submitted" } } },
+          "then": {
+            "required": ["sessionId"],
+            "properties": {
+              "sessionId": { "$ref": "#/definitions/sessionId" },
+              "properties": { "$ref": "#/definitions/feedbackSubmittedProperties" }
+            }
+          }
+        }
+      ]
+    },
+    "appOpenedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_version", "build", "os_major"],
+      "properties": {
+        "app_version": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$" },
+        "build": { "type": "integer", "minimum": 1 },
+        "os_major": { "type": "integer", "minimum": 18, "maximum": 99 }
+      }
+    },
+    "sessionStartTappedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "route_type", "network_class"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["one_way_ru_to_en", "dialogue"] },
+        "route_type": { "$ref": "#/definitions/routeType" },
+        "network_class": { "type": "string", "enum": ["wifi", "cellular", "offline", "other", "unknown"] }
+      }
+    },
+    "sessionCreateRequestedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "leg_count"],
+      "properties": {
+        "trace_id": { "$ref": "#/definitions/traceId" },
+        "leg_count": { "type": "integer", "minimum": 1, "maximum": 2 }
+      }
+    },
+    "sessionSecretReceivedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_language", "latency_ms", "measurement_quality"],
+      "properties": {
+        "target_language": { "type": "string", "enum": ["ru", "en"] },
+        "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "webrtcOfferCreatedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latency_ms", "measurement_quality"],
+      "properties": {
+        "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "webrtcConnectedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setup_ms", "measurement_quality"],
+      "properties": {
+        "setup_ms": { "type": "integer", "minimum": 0, "maximum": 120000 },
+        "ice_candidate_type": { "type": "string", "enum": ["host", "srflx", "relay", "prflx", "unknown"] },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "micEnabledChangedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_side", "enabled", "reason"],
+      "properties": {
+        "active_side": { "type": "string", "enum": ["russian_speaker", "english_speaker"] },
+        "enabled": { "type": "boolean" },
+        "reason": { "type": "string", "enum": ["session_start", "user_switch", "mute", "push_to_talk", "reconnect", "session_stop"] }
+      }
+    },
+    "firstTranscriptProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ms_from_speech_start", "char_count", "measurement_quality"],
+      "properties": {
+        "ms_from_speech_start": { "type": "integer", "minimum": 0, "maximum": 600000 },
+        "char_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "firstRemoteAudioProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ms_from_speech_start", "measurement_quality"],
+      "properties": {
+        "ms_from_speech_start": { "type": "integer", "minimum": 0, "maximum": 600000 },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "networkDegradedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rtt_bucket", "packet_loss_bucket", "state"],
+      "properties": {
+        "rtt_bucket": { "type": "string", "enum": ["under_50", "50_119", "120_249", "250_399", "400_plus", "unavailable"] },
+        "packet_loss_bucket": { "type": "string", "enum": ["under_1", "1_4", "5_9", "10_plus", "unavailable"] },
+        "state": { "type": "string", "enum": ["degraded", "disconnected", "failed"] }
+      }
+    },
+    "reconnectAttemptProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt", "reason"],
+      "properties": {
+        "attempt": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "reason": { "type": "string", "enum": ["connection_failed", "disconnected_timeout", "secret_expired", "manual_retry"] }
+      }
+    },
+    "reconnectResultProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "duration_ms", "measurement_quality"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "duration_ms": { "type": "integer", "minimum": 0, "maximum": 600000 },
+        "measurement_quality": { "$ref": "#/definitions/measurementQuality" }
+      }
+    },
+    "audioRouteChangedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_type", "to_type", "reason"],
+      "properties": {
+        "from_type": { "$ref": "#/definitions/routeType" },
+        "to_type": { "$ref": "#/definitions/routeType" },
+        "reason": { "type": "string", "enum": ["new_device_available", "old_device_unavailable", "category_change", "override", "interruption_end", "unknown"] }
+      }
+    },
+    "sessionCompletedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_s", "active_audio_s", "turns", "reconnects", "result"],
+      "properties": {
+        "duration_s": { "type": "integer", "minimum": 0, "maximum": 7200 },
+        "active_audio_s": { "type": "integer", "minimum": 0, "maximum": 7200 },
+        "turns": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "reconnects": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "result": { "type": "string", "enum": ["completed", "user_stopped", "failed", "killed_by_config"] }
+      }
+    },
+    "feedbackSubmittedProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rating", "categories"],
+      "properties": {
+        "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "categories": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["wrong_meaning", "wrong_number", "wrong_name", "omission", "latency", "audio_quality", "echo", "connection"]
+          }
+        }
+      }
+    }
+  }
+}

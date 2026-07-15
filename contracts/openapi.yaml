@@ -783,70 +783,7 @@ components:
           type: string
           format: date-time
     TelemetryBatchRequest:
-      type: object
-      additionalProperties: false
-      required: [schemaVersion, sentAt, events]
-      properties:
-        schemaVersion:
-          type: string
-          const: '1.0'
-        sentAt:
-          type: string
-          format: date-time
-        events:
-          type: array
-          minItems: 1
-          maxItems: 100
-          items:
-            $ref: '#/components/schemas/TelemetryEventEnvelope'
-    TelemetryEventEnvelope:
-      type: object
-      additionalProperties: false
-      required: [eventId, type, monotonicMs, properties]
-      properties:
-        eventId:
-          $ref: '#/components/schemas/EventId'
-        sessionId:
-          oneOf:
-            - $ref: '#/components/schemas/SessionId'
-            - type: 'null'
-        legId:
-          oneOf:
-            - $ref: '#/components/schemas/LegId'
-            - type: 'null'
-        type:
-          type: string
-          enum:
-            - app_opened
-            - session_start_tapped
-            - session_create_requested
-            - session_secret_received
-            - webrtc_offer_created
-            - webrtc_connected
-            - mic_enabled_changed
-            - first_input_transcript
-            - first_output_transcript
-            - first_remote_audio
-            - network_degraded
-            - reconnect_attempt
-            - reconnect_result
-            - audio_route_changed
-            - session_completed
-            - feedback_submitted
-        monotonicMs:
-          type: integer
-          minimum: 0
-        properties:
-          type: object
-          description: Draft until TEL-01; server accepts only per-event allowlisted keys
-          maxProperties: 20
-          additionalProperties:
-            oneOf:
-              - type: string
-                maxLength: 120
-              - type: number
-              - type: integer
-              - type: boolean
+      $ref: './telemetry.schema.json'
     TelemetryBatchResponse:
       type: object
       additionalProperties: false

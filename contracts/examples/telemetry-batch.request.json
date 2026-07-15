@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "sentAt": "2026-07-15T09:50:00Z",
+  "events": [
+    {
+      "eventId": "3f1b26b5-86ab-43a2-bf0c-82d83701ef77",
+      "sessionId": null,
+      "legId": null,
+      "type": "app_opened",
+      "monotonicMs": 120,
+      "properties": {
+        "app_version": "0.1.0",
+        "build": 42,
+        "os_major": 26
+      }
+    },
+    {
+      "eventId": "bc2cac9c-a488-4d02-8600-cf20c3890cb2",
+      "sessionId": "ts_0123456789abcdefghijklmn",
+      "legId": "leg_0123456789abcdefghijklmn",
+      "type": "first_remote_audio",
+      "monotonicMs": 4820,
+      "properties": {
+        "ms_from_speech_start": 940,
+        "measurement_quality": "exact"
+      }
+    }
+  ]
+}

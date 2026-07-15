@@ -6,7 +6,7 @@ Shared contracts между backend и iOS.
 
 - `openapi.yaml` — HTTP API P0, source of truth для DTO и error semantics.
 - `examples/` — versioned request/response fixtures для contract tests и iOS mocks.
-- `telemetry.schema.json` — будет добавлен задачей TEL-01; до этого telemetry properties считаются draft.
+- `telemetry.schema.json` — proposed TEL-01 v1 closed allowlist для technical telemetry; становится accepted только после H-019 iOS/privacy review.
 
 ## Правила изменений
 
