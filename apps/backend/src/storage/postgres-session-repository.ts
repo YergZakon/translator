@@ -7,9 +7,14 @@ import {
 
 import type { Pool, PoolClient } from 'pg';
 
-import type { TranslationLegCredentials, TranslationSession } from '../services/session-service.js';
+import type {
+  CompleteTranslationSessionResponse,
+  TranslationLegCredentials,
+  TranslationSession
+} from '../services/session-service.js';
 import type { QuotaReservation } from '../services/quota-service.js';
 import {
+  type CompleteSessionPersistenceInput,
   type CreateSessionPersistenceInput,
   type CreatedSessionPersistenceResult,
   type RecreateLegPersistenceInput,
@@ -35,6 +40,10 @@ interface StoredSessionRow {
   client_leg_id: string;
   leg_id: string;
   target_language: 'ru' | 'en';
+}
+
+interface CompletionRow {
+  completed_at: Date | null;
 }
 
 interface EncryptedResponse {
@@ -159,24 +168,6 @@ export class PostgresSessionRepository implements SessionRepository {
       await client.query('BEGIN');
       await this.#pruneExpired(client, input.now);
       await this.#lockOperation(client, operation, input.safetyIdentifier, scopeId, input.idempotencyKey);
-
-      const existing = await this.#findIdempotency(
-        client,
-        operation,
-        input.safetyIdentifier,
-        scopeId,
-        input.idempotencyKey
-      );
-      if (existing !== null) {
-        this.#assertFingerprint(existing.request_fingerprint, input.requestFingerprint);
-        const credentials = this.#decrypt<TranslationLegCredentials>(
-          existing,
-          this.#aad(operation, input, scopeId)
-        );
-        await client.query('COMMIT');
-        return credentials;
-      }
-
       await this.#lockQuotaOwner(client, input.safetyIdentifier);
 
       const stored = await client.query<StoredSessionRow>(
@@ -193,6 +184,7 @@ export class PostgresSessionRepository implements SessionRepository {
           WHERE s.session_id = $1
             AND s.owner_safety_identifier = $2
             AND s.active_until > $3
+            AND s.completed_at IS NULL
             AND l.client_leg_id = $4
           FOR UPDATE OF s, l
         `,
@@ -201,6 +193,23 @@ export class PostgresSessionRepository implements SessionRepository {
       const storedRow = stored.rows[0];
       if (storedRow === undefined) {
         throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
+      }
+
+      const existing = await this.#findIdempotency(
+        client,
+        operation,
+        input.safetyIdentifier,
+        scopeId,
+        input.idempotencyKey
+      );
+      if (existing !== null) {
+        this.#assertFingerprint(existing.request_fingerprint, input.requestFingerprint);
+        const credentials = this.#decrypt<TranslationLegCredentials>(
+          existing,
+          this.#aad(operation, input, scopeId)
+        );
+        await client.query('COMMIT');
+        return credentials;
       }
 
       await this.#reserveQuota(client, operation, input.safetyIdentifier, input.now, input.quota);
@@ -233,6 +242,69 @@ export class PostgresSessionRepository implements SessionRepository {
       );
       await client.query('COMMIT');
       return credentials;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async completeSession(
+    input: CompleteSessionPersistenceInput
+  ): Promise<CompleteTranslationSessionResponse> {
+    const client = await this.#pool.connect();
+    try {
+      await client.query('BEGIN');
+      await this.#lockQuotaOwner(client, input.safetyIdentifier);
+      const existing = await client.query<CompletionRow>(
+        `
+          SELECT completed_at
+          FROM translation_sessions
+          WHERE session_id = $1 AND owner_safety_identifier = $2
+          FOR UPDATE
+        `,
+        [input.sessionId, input.safetyIdentifier]
+      );
+      const row = existing.rows[0];
+      if (row === undefined) {
+        throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
+      }
+      const completedAt = row.completed_at ?? input.now;
+      if (row.completed_at === null) {
+        await client.query(
+          `
+            UPDATE translation_sessions
+            SET completed_at = $3,
+                completion_result = $4,
+                duration_seconds = $5,
+                active_audio_seconds = $6,
+                turns = $7,
+                reconnects = $8,
+                final_route_type = $9,
+                completion_error_code = $10
+            WHERE session_id = $1 AND owner_safety_identifier = $2
+          `,
+          [
+            input.sessionId,
+            input.safetyIdentifier,
+            completedAt,
+            input.completion.result,
+            input.completion.durationSeconds,
+            input.completion.activeAudioSeconds,
+            input.completion.turns,
+            input.completion.reconnects,
+            input.completion.finalRouteType ?? null,
+            input.completion.errorCode ?? null
+          ]
+        );
+      }
+      await client.query('COMMIT');
+      return {
+        sessionId: input.sessionId,
+        status: 'completed',
+        completedAt: completedAt.toISOString()
+      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -287,6 +359,7 @@ export class PostgresSessionRepository implements SessionRepository {
         JOIN translation_session_legs AS l ON l.session_id = s.session_id
         WHERE s.owner_safety_identifier = $1
           AND s.active_until > $2
+          AND s.completed_at IS NULL
       `,
       [owner, now]
     );

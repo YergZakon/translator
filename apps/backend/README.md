@@ -26,6 +26,8 @@ Translation-session ownership, current leg metadata, and create/recreate idempot
 
 Before any OpenAI secret is minted, PostgreSQL atomically enforces per-installation limits for active translation legs, secret mints per rolling minute, and UTC-day reserved billable leg-minutes. Idempotent replays do not consume quota, and a broker failure rolls the reservation back with the surrounding transaction. Configure the server-side policy with `QUOTA_MAX_PARALLEL_LEGS` (default `2`), `QUOTA_SECRET_MINTS_PER_MINUTE` (default `8`), and `QUOTA_DAILY_LEG_MINUTES` (default `120`). A rejected operation returns the existing contract error `429 RATE_LIMITED` with a deterministic `retryAfterMs`; no quota fields are added to the public DTOs.
 
+`POST /v1/translation-sessions/{sessionId}/complete` stores the first authenticated technical completion summary and returns that same completion on later retries. It remains available while the global kill switch is active, rejects foreign or unknown sessions with the same `404`, prevents further leg recreation, and immediately releases the completed session from the active-leg limit. Reserved daily leg-minutes are intentionally not refunded. Audio, transcript text, tokens, and client secrets are never accepted or persisted by this endpoint.
+
 ## Checks
 
 ```powershell

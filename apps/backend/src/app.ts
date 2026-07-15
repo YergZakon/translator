@@ -9,6 +9,8 @@ import Fastify, {
 import { defaultAppConfig, type AppConfig } from './domain/app-config.js';
 import {
   appConfigSchema,
+  completeTranslationSessionRequestSchema,
+  completeTranslationSessionResponseSchema,
   configHeadersSchema,
   createSessionHeadersSchema,
   createSessionRequestSchema,
@@ -35,6 +37,7 @@ import {
   UnavailableSecretBroker
 } from './services/openai-secret-broker.js';
 import {
+  type CompleteTranslationSessionRequest,
   type CreateSessionRequest,
   type RecreateLegRequest,
   SessionService,
@@ -64,6 +67,10 @@ interface ConfigHeaders {
 interface CreateSessionHeaders {
   authorization?: string;
   'idempotency-key': string;
+}
+
+interface AuthorizationHeaders {
+  authorization?: string;
 }
 
 interface RecreateTranslationLegParams {
@@ -432,6 +439,55 @@ export function buildApp(options: BuildAppOptions = {}) {
             error.httpStatus,
             error.code,
             messages[error.code],
+            error.retryable,
+            error.retryAfterMs
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{
+    Params: RecreateTranslationLegParams;
+    Headers: AuthorizationHeaders;
+    Body: CompleteTranslationSessionRequest;
+  }>(
+    '/v1/translation-sessions/:sessionId/complete',
+    {
+      schema: {
+        params: recreateTranslationLegParamsSchema,
+        body: completeTranslationSessionRequestSchema,
+        response: {
+          200: completeTranslationSessionResponseSchema,
+          400: errorEnvelopeSchema,
+          401: errorEnvelopeSchema,
+          404: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const identity = await tokenVerifier.authenticateAuthorizationHeader(
+        request.headers.authorization
+      );
+      if (identity === null) {
+        return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+      }
+
+      try {
+        const completion = await sessionService.complete(request.body, {
+          sessionId: request.params.sessionId,
+          safetyIdentifier: identity.safetyIdentifier
+        });
+        return reply.code(200).send(completion);
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            error.message,
             error.retryable,
             error.retryAfterMs
           );

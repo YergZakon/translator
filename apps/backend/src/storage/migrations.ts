@@ -17,6 +17,11 @@ const migrations = [
     version: 3,
     name: 'translation_quotas',
     url: new URL('../../migrations/003_translation_quotas.sql', import.meta.url)
+  },
+  {
+    version: 4,
+    name: 'session_completion',
+    url: new URL('../../migrations/004_session_completion.sql', import.meta.url)
   }
 ] as const;
 
