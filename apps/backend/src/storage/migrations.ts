@@ -7,6 +7,11 @@ const migrations = [
     version: 1,
     name: 'installations',
     url: new URL('../../migrations/001_installations.sql', import.meta.url)
+  },
+  {
+    version: 2,
+    name: 'translation_sessions',
+    url: new URL('../../migrations/002_translation_sessions.sql', import.meta.url)
   }
 ] as const;
 

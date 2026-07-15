@@ -5,6 +5,7 @@ import { loadRuntimeConfig } from './runtime-config.js';
 import { OpenAISecretBroker } from './services/openai-secret-broker.js';
 import { runMigrations } from './storage/migrations.js';
 import { PostgresInstallationRepository } from './storage/postgres-installation-repository.js';
+import { PostgresSessionRepository } from './storage/postgres-session-repository.js';
 
 async function main(): Promise<void> {
   const runtime = loadRuntimeConfig();
@@ -16,9 +17,14 @@ async function main(): Promise<void> {
   try {
     await runMigrations(pool);
     const installationRepository = new PostgresInstallationRepository(pool);
+    const sessionRepository = new PostgresSessionRepository(
+      pool,
+      runtime.safetyIdentifierSecret
+    );
     const app = buildApp({
       serviceVersion: runtime.serviceVersion,
       installationRepository,
+      sessionRepository,
       safetyIdentifierSecret: runtime.safetyIdentifierSecret,
       secretBroker: new OpenAISecretBroker({
         apiKey: runtime.openAIAPIKey,
