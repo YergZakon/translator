@@ -4,6 +4,11 @@ import Foundation
 
 protocol SessionAPI {
     func createSession(request: CreateTranslationSessionRequest, idempotencyKey: String) async throws -> CreateSessionResponse
+    func recreateTranslationLeg(
+        sessionId: String,
+        request: RecreateTranslationLegRequest,
+        idempotencyKey: String
+    ) async throws -> TranslationLegCredentials
 }
 
 protocol ConfigAPI {
@@ -115,6 +120,29 @@ class MockBackendClient: SessionAPI, ConfigAPI, FeedbackAPI, InstallationAPI {
             tokenType: .bearer,
             appToken: "mock_app_token_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
             expiresAt: nil
+        )
+    }
+
+    func recreateTranslationLeg(
+        sessionId: String,
+        request: RecreateTranslationLegRequest,
+        idempotencyKey: String
+    ) async throws -> TranslationLegCredentials {
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        if !isTokenValid {
+            throw BackendError.serverError(AppError(code: .INVALID_APP_TOKEN, message: "Invalid app token", retryable: false, retryAfterMs: nil, traceId: newTraceId()))
+        }
+
+        return TranslationLegCredentials(
+            legId: newLegId(),
+            clientLegId: request.clientLegId,
+            targetLanguage: .en,
+            provider: .openai,
+            model: "gpt-realtime-translate",
+            clientSecret: "ek_mock_secret_" + UUID().uuidString.prefix(8).lowercased(),
+            expiresAt: "2026-07-14T10:05:00Z",
+            callsUrl: "https://api.openai.com/v1/realtime/translations/calls"
         )
     }
 }

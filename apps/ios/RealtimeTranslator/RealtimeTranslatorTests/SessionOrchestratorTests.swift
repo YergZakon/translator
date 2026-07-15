@@ -5,8 +5,10 @@ import Combine
 final class MockSessionAPI: SessionAPI, ConfigAPI {
     var configResult: Result<ConfigResponse, Error>?
     var sessionResult: Result<CreateSessionResponse, Error>?
+    var recreateResult: Result<TranslationLegCredentials, Error>?
     private(set) var lastIdempotencyKey: String?
     private(set) var lastRequest: CreateTranslationSessionRequest?
+    private(set) var recreateCalls: [(sessionId: String, request: RecreateTranslationLegRequest, idempotencyKey: String)] = []
 
     func getConfig(appVersion: String, appBuild: Int, etag: String?) async throws -> ConfigResponse {
         guard let configResult else { throw URLError(.badServerResponse) }
@@ -21,6 +23,16 @@ final class MockSessionAPI: SessionAPI, ConfigAPI {
         lastIdempotencyKey = idempotencyKey
         guard let sessionResult else { throw URLError(.badServerResponse) }
         return try sessionResult.get()
+    }
+
+    func recreateTranslationLeg(
+        sessionId: String,
+        request: RecreateTranslationLegRequest,
+        idempotencyKey: String
+    ) async throws -> TranslationLegCredentials {
+        recreateCalls.append((sessionId, request, idempotencyKey))
+        guard let recreateResult else { throw URLError(.badServerResponse) }
+        return try recreateResult.get()
     }
 }
 
@@ -133,6 +145,71 @@ final class SessionOrchestratorTests: XCTestCase {
             .failed(code: "UNSUPPORTED_MODE", message: "Dialogue mode is not available yet")
         )
         XCTAssertNil(api.lastRequest)
+    }
+
+    @MainActor
+    func testDisconnectTriggersReconnectWithExclusiveMicAndOutputOnReplacementLeg() async throws {
+        let api = makeConfiguredAPI()
+        api.recreateResult = .success(TranslationLegCredentials(
+            legId: "leg_11111111111111111111",
+            clientLegId: "ru-to-en",
+            targetLanguage: .en,
+            provider: .openai,
+            model: "gpt",
+            clientSecret: "replacement-secret",
+            expiresAt: "2026-07-15T10:00:00Z",
+            callsUrl: "https://api.openai.com/v1/realtime/translations/calls"
+        ))
+
+        var legs: [MockTranslationLeg] = []
+        let container = DependencyContainer(environment: .development, sessionAPI: api, configAPI: api)
+        let store = TranslationSessionStore(dependencies: container) { _, _, _ in
+            let leg = MockTranslationLeg()
+            legs.append(leg)
+            return leg
+        }
+
+        await store.startSession(mode: .oneWayRuToEn)
+        let firstLeg = try XCTUnwrap(legs.first)
+        firstLeg.emit(.connectionStateChanged(.connected))
+        try await waitUntil { store.state == .active }
+        XCTAssertEqual(firstLeg.microphoneEnabled, true)
+        XCTAssertEqual(firstLeg.outputEnabled, true)
+
+        firstLeg.emit(.connectionStateChanged(.disconnected))
+        try await waitUntil { legs.count == 2 }
+
+        let secondLeg = legs[1]
+        // The failed leg must be drained before its replacement exists.
+        XCTAssertEqual(firstLeg.microphoneEnabled, false)
+        XCTAssertEqual(firstLeg.outputEnabled, false)
+        XCTAssertEqual(firstLeg.closeReason, .connectionTimeout)
+        XCTAssertNotEqual(ObjectIdentifier(secondLeg), ObjectIdentifier(firstLeg))
+        // Replacement must not be enabled until it reports its own connected state.
+        XCTAssertNil(secondLeg.microphoneEnabled)
+        XCTAssertNil(secondLeg.outputEnabled)
+
+        secondLeg.emit(.connectionStateChanged(.connected))
+        try await waitUntil { store.state == .active }
+        XCTAssertEqual(secondLeg.microphoneEnabled, true)
+        XCTAssertEqual(secondLeg.outputEnabled, true)
+        XCTAssertEqual(api.recreateCalls.count, 1)
+        XCTAssertEqual(api.recreateCalls.first?.request.reason, .disconnectedTimeout)
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        _ condition: () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline {
+                XCTFail("Condition not met within \(timeout)s")
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func makeConfiguredAPI(killSwitch: Bool = false) -> MockSessionAPI {
