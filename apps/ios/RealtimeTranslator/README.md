@@ -36,3 +36,28 @@ This project uses [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate 
   ```bash
   xcodebuild -project RealtimeTranslator.xcodeproj -scheme RealtimeTranslatorTests -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
   ```
+
+## Physical iPhone reconnect acceptance
+
+After building the current `main` with the Stage configuration on a physical iPhone,
+run the repository helper from Terminal on the Mac:
+
+```bash
+./scripts/collect_ios_reconnect_acceptance.sh
+```
+
+The helper uses Xcode's `xcrun devicectl` to detect a connected iPhone and collect
+the device model and iOS version. It also records the Xcode version, exact Git commit,
+Stage URL, and a sanitized Stage health result. Audio, reconnect behavior, transcripts,
+and stop/close are confirmed interactively as `PASS` or `FAIL` because collecting or
+recording conversation content is forbidden. The resulting Markdown report is saved
+to the Mac desktop and never includes the device identifier, audio, transcript text,
+app token, client secret, or API key.
+
+If several iPhones are connected, the helper asks which one to use. Optional flags:
+
+```bash
+./scripts/collect_ios_reconnect_acceptance.sh \
+  --stage-url https://backend-api-stage-ee06.up.railway.app \
+  --output "$HOME/Desktop/ios12-acceptance.md"
+```
