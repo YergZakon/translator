@@ -16,6 +16,7 @@ FROM pnpm-base AS build
 RUN pnpm install --frozen-lockfile
 
 COPY apps/backend apps/backend
+COPY contracts/openapi.yaml contracts/openapi.yaml
 COPY contracts/telemetry.schema.json contracts/telemetry.schema.json
 COPY contracts/examples/telemetry-batch.request.json contracts/examples/telemetry-batch.request.json
 RUN pnpm typecheck && pnpm test && pnpm build
