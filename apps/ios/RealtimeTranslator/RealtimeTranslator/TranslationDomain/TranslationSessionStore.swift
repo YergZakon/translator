@@ -49,19 +49,23 @@ final class TranslationSessionStore: ObservableObject {
     private var reconnectBackoffMs: [Int] = []
     private var disconnectedGraceMs = 0
     private var reconnectTask: Task<Void, Never>?
+    private let reconnectClock: ReconnectClock
     private lazy var reconnectCoordinator = ReconnectCoordinator(
         sessionAPI: dependencies.sessionAPI,
         makeLeg: makeLeg,
-        diagnostics: dependencies.diagnosticsStore
+        diagnostics: dependencies.diagnosticsStore,
+        clock: reconnectClock
     )
 
     init(
         dependencies: DependencyContainer = .shared,
+        reconnectClock: ReconnectClock = SystemReconnectClock(),
         makeLeg: @escaping TranslationLegFactory = { configuration, side, diagnostics in
             OpenAITranslationLeg(configuration: configuration, side: side, diagnostics: diagnostics)
         }
     ) {
         self.dependencies = dependencies
+        self.reconnectClock = reconnectClock
         self.makeLeg = makeLeg
     }
 
@@ -223,22 +227,34 @@ final class TranslationSessionStore: ObservableObject {
             return
         }
 
+        state = .reconnecting(attempt: 0)
+
+        if applyGracePeriod && disconnectedGraceMs > 0 {
+            // Recovery grace: the original leg and its event observation stay alive so
+            // a transient .disconnected can resolve on the existing PeerConnection.
+            // If that same leg reports .connected, handleEvent cancels this task
+            // before anything is detached, drained or recreated.
+            do {
+                try await reconnectClock.sleep(milliseconds: disconnectedGraceMs)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+        }
+
+        // Grace expired (or the leg failed hard): detach the leg now. Its drain/close
+        // is driven explicitly by the reconnect coordinator instead.
         let failedLeg = currentLeg
         currentLeg = nil
-        // Stop reacting to the failed leg's own event stream; its drain/close is now
-        // driven explicitly by the reconnect coordinator instead.
         eventTask?.cancel()
         eventTask = nil
-
-        state = .reconnecting(attempt: 0)
 
         let context = ReconnectSessionContext(
             sessionId: sessionId,
             clientLegId: activeClientLegId,
             side: .russianSpeaker,
             maxAttempts: reconnectMaxAttempts,
-            backoffMs: reconnectBackoffMs,
-            disconnectedGraceMs: applyGracePeriod ? disconnectedGraceMs : 0
+            backoffMs: reconnectBackoffMs
         )
 
         let outcome = await reconnectCoordinator.reconnect(
@@ -307,6 +323,12 @@ final class TranslationSessionStore: ObservableObject {
             case .connecting:
                 state = .connecting
             case .connected:
+                // Never resurrect an already-stopped session from a stale event.
+                guard currentLeg != nil else { return }
+                // A live leg (the original recovering within the grace window, or a
+                // freshly connected replacement) ends any pending reconnect.
+                reconnectTask?.cancel()
+                reconnectTask = nil
                 await currentLeg?.setMicrophoneEnabled(!isMuted)
                 await currentLeg?.setOutputEnabled(true)
                 state = .active

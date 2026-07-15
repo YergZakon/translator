@@ -134,8 +134,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 3,
-                backoffMs: [500, 1500, 3000],
-                disconnectedGraceMs: 0
+                backoffMs: [500, 1500, 3000]
             )
         )
 
@@ -222,8 +221,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 3,
-                backoffMs: [500, 1500, 3000],
-                disconnectedGraceMs: 0
+                backoffMs: [500, 1500, 3000]
             )
         )
 
@@ -249,8 +247,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 0,
-                backoffMs: [],
-                disconnectedGraceMs: 0
+                backoffMs: []
             )
         )
 
@@ -281,8 +278,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 3,
-                backoffMs: [500, 1500, 3000],
-                disconnectedGraceMs: 0
+                backoffMs: [500, 1500, 3000]
             )
         )
 
@@ -311,8 +307,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 3,
-                backoffMs: [500],
-                disconnectedGraceMs: 0
+                backoffMs: [500]
             )
         )
 
@@ -344,8 +339,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 1,
-                backoffMs: [0],
-                disconnectedGraceMs: 0
+                backoffMs: [0]
             )
         )
 
@@ -392,8 +386,7 @@ final class ReconnectCoordinatorTests: XCTestCase {
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
                 maxAttempts: 1,
-                backoffMs: [0],
-                disconnectedGraceMs: 0
+                backoffMs: [0]
             )
         )
 
@@ -401,31 +394,112 @@ final class ReconnectCoordinatorTests: XCTestCase {
         XCTAssertEqual(api.recreateCalls.first?.request.reason, .manualRetry)
     }
 
-    func testDisconnectedGracePeriodIsAwaitedBeforeFirstAttempt() async {
+    // MARK: Cancellation must never mint a secret or resurrect a leg
+
+    func testCancellationDuringBackoffMintsNoSecretAndCreatesNoLeg() async {
         let api = SpySessionAPI()
         api.recreateResult = .success(makeCredentials())
-        var sleeps: [Int] = []
+        let createdLegs = Counter()
+        let clock = GateClock()
+        let sleepStarted = expectation(description: "backoff sleep started")
+        clock.onSleepStarted = { sleepStarted.fulfill() }
         let coordinator = ReconnectCoordinator(
             sessionAPI: api,
-            makeLeg: { _, _, _ in SpyTranslationLeg() },
+            makeLeg: { _, _, _ in
+                createdLegs.increment()
+                return SpyTranslationLeg()
+            },
             diagnostics: DiagnosticsStore(),
-            clock: ImmediateClock(onSleep: { sleeps.append($0) })
+            clock: clock
         )
 
-        _ = await coordinator.reconnect(
+        let task = Task {
+            await coordinator.reconnect(
+                failedLeg: nil,
+                reason: .connectionFailed,
+                context: ReconnectSessionContext(
+                    sessionId: "ts_01234567890123456789",
+                    clientLegId: "ru-to-en",
+                    side: .russianSpeaker,
+                    maxAttempts: 3,
+                    backoffMs: [500, 1500, 3000]
+                )
+            )
+        }
+
+        await fulfillment(of: [sleepStarted], timeout: 2)
+        task.cancel()
+        let outcome = await task.value
+
+        guard case .exhausted = outcome else { return XCTFail("Expected exhausted outcome") }
+        XCTAssertEqual(api.recreateCalls.count, 0, "Cancellation during backoff must not mint a fresh secret")
+        XCTAssertEqual(createdLegs.value, 0, "Cancellation during backoff must not create a replacement leg")
+    }
+
+    // MARK: Failed replacement candidates are closed, never orphaned
+
+    func testFailedReplacementCandidateIsClosedAndNeverEnabledBeforeNextAttempt() async {
+        let log = SharedLog()
+        let api = SpySessionAPI()
+        api.recreateResultsQueue = [
+            .success(makeCredentials()),
+            .success(makeCredentials())
+        ]
+        var candidates: [SpyTranslationLeg] = []
+        let coordinator = ReconnectCoordinator(
+            sessionAPI: api,
+            makeLeg: { _, _, _ in
+                let leg = SpyTranslationLeg(sharedLog: log, name: "candidate\(candidates.count)")
+                if candidates.isEmpty {
+                    leg.connectError = URLError(.timedOut)
+                }
+                candidates.append(leg)
+                return leg
+            },
+            diagnostics: DiagnosticsStore(),
+            clock: ImmediateClock()
+        )
+
+        let outcome = await coordinator.reconnect(
             failedLeg: nil,
-            reason: .disconnectedTimeout,
+            reason: .connectionFailed,
             context: ReconnectSessionContext(
                 sessionId: "ts_01234567890123456789",
                 clientLegId: "ru-to-en",
                 side: .russianSpeaker,
-                maxAttempts: 1,
-                backoffMs: [500],
-                disconnectedGraceMs: 2000
+                maxAttempts: 2,
+                backoffMs: [0]
             )
         )
 
-        XCTAssertEqual(sleeps, [2000, 500], "Grace period must be waited before the first backoff attempt")
+        guard case .reconnected(let leg, _) = outcome else { return XCTFail("Expected reconnected outcome") }
+        XCTAssertEqual(candidates.count, 2)
+        XCTAssertEqual(api.recreateCalls.count, 2)
+
+        let failedCandidate = candidates[0]
+        XCTAssertEqual(failedCandidate.microphoneEnabled, false, "Failed candidate must be explicitly muted")
+        XCTAssertEqual(failedCandidate.outputEnabled, false, "Failed candidate must never become audible")
+        XCTAssertEqual(failedCandidate.closeReason, .errorOccurred, "Failed candidate must be closed before the next attempt")
+
+        XCTAssertTrue(leg === candidates[1], "Second candidate must be the reconnected leg")
+        XCTAssertNil(candidates[1].microphoneEnabled, "Coordinator must not enable the successful candidate itself")
+        XCTAssertNil(candidates[1].outputEnabled)
+    }
+}
+
+private final class Counter: @unchecked Sendable {
+    private(set) var value = 0
+    func increment() { value += 1 }
+}
+
+private final class GateClock: ReconnectClock, @unchecked Sendable {
+    var onSleepStarted: (() -> Void)?
+
+    func sleep(milliseconds: Int) async throws {
+        onSleepStarted?()
+        // Park like a long Task.sleep: only cancellation releases the wait early,
+        // and it must propagate as CancellationError exactly like Task.sleep.
+        try await Task.sleep(nanoseconds: 3_000_000_000)
     }
 }
 

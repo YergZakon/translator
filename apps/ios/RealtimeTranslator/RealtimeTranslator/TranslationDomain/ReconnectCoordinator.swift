@@ -1,13 +1,17 @@
 import Foundation
 
 protocol ReconnectClock {
-    func sleep(milliseconds: Int) async
+    /// Must propagate task cancellation (throw `CancellationError`) exactly like `Task.sleep`.
+    func sleep(milliseconds: Int) async throws
 }
 
 struct SystemReconnectClock: ReconnectClock {
-    func sleep(milliseconds: Int) async {
-        guard milliseconds > 0 else { return }
-        try? await Task.sleep(nanoseconds: UInt64(milliseconds) * 1_000_000)
+    func sleep(milliseconds: Int) async throws {
+        guard milliseconds > 0 else {
+            try Task.checkCancellation()
+            return
+        }
+        try await Task.sleep(nanoseconds: UInt64(milliseconds) * 1_000_000)
     }
 }
 
@@ -17,7 +21,6 @@ struct ReconnectSessionContext {
     let side: Side
     let maxAttempts: Int
     let backoffMs: [Int]
-    let disconnectedGraceMs: Int
 }
 
 enum ReconnectOutcome {
@@ -28,6 +31,8 @@ enum ReconnectOutcome {
 }
 
 /// Drives leg replacement for a single failed/disconnected translation leg.
+/// The disconnected-grace window is owned by `TranslationSessionStore`: by the time
+/// this coordinator runs, the failed leg is already detached and must be drained.
 /// Every reconnect attempt (backoff round) uses a freshly generated Idempotency-Key;
 /// key reuse for retries within one HTTP call is handled by `LiveBackendClient` itself.
 final class ReconnectCoordinator {
@@ -65,10 +70,6 @@ final class ReconnectCoordinator {
             await failedLeg.close(reason: .connectionTimeout)
         }
 
-        if context.disconnectedGraceMs > 0 {
-            await clock.sleep(milliseconds: context.disconnectedGraceMs)
-        }
-
         guard context.maxAttempts > 0 else {
             diagnostics.log("Reconnect: no attempts allowed by policy")
             return .exhausted
@@ -82,7 +83,13 @@ final class ReconnectCoordinator {
             let backoff = context.backoffMs.isEmpty
                 ? 0
                 : context.backoffMs[min(attempt - 1, context.backoffMs.count - 1)]
-            await clock.sleep(milliseconds: backoff)
+            do {
+                try await clock.sleep(milliseconds: backoff)
+            } catch {
+                // Cancelled during backoff: the session was stopped, never mint a secret.
+                return .exhausted
+            }
+            guard !Task.isCancelled else { return .exhausted }
 
             let idempotencyKey = idempotencyKeyFactory()
             diagnostics.log("Reconnect: attempt \(attempt)/\(context.maxAttempts) key=\(idempotencyKey.prefix(8))")
@@ -93,6 +100,10 @@ final class ReconnectCoordinator {
                     request: RecreateTranslationLegRequest(clientLegId: context.clientLegId, reason: reason),
                     idempotencyKey: idempotencyKey
                 )
+
+                // Cancelled while the request was in flight: the fresh secret stays
+                // unused (it expires server-side) and no leg may be created for it.
+                guard !Task.isCancelled else { return .exhausted }
 
                 let leg = makeLeg(
                     LegConfiguration(
@@ -105,8 +116,16 @@ final class ReconnectCoordinator {
                     diagnostics
                 )
 
-                try await leg.connect()
-                return .reconnected(leg, credentials)
+                do {
+                    try await leg.connect()
+                    return .reconnected(leg, credentials)
+                } catch {
+                    // A candidate whose connect failed must never linger as an orphan
+                    // PeerConnection: keep it inaudible/muted and close it before retrying.
+                    await leg.setMicrophoneEnabled(false)
+                    await leg.setOutputEnabled(false)
+                    await leg.close(reason: .errorOccurred)
+                }
             } catch let error as BackendError {
                 if case .serverError(let appError) = error {
                     switch appError.code {
@@ -118,8 +137,10 @@ final class ReconnectCoordinator {
                         break
                     }
                 }
+            } catch is CancellationError {
+                return .exhausted
             } catch {
-                // Leg construction/connect failure: fall through to the next attempt.
+                // Transport-level failure: fall through to the next attempt.
             }
 
             attempt += 1
