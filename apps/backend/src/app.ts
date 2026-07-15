@@ -15,6 +15,8 @@ import {
   createSessionHeadersSchema,
   createSessionRequestSchema,
   errorEnvelopeSchema,
+  feedbackRequestSchema,
+  feedbackResponseSchema,
   healthResponseSchema,
   recreateTranslationLegParamsSchema,
   recreateTranslationLegRequestSchema,
@@ -26,6 +28,11 @@ import {
 } from './http/schemas.js';
 import { RepositoryTokenVerifier, type TokenVerifier } from './security/token-verifier.js';
 import { ConfigService } from './services/config-service.js';
+import {
+  FeedbackService,
+  FeedbackServiceError,
+  type FeedbackRequest
+} from './services/feedback-service.js';
 import {
   InstallationService,
   InstallationServiceError,
@@ -46,6 +53,7 @@ import {
 import type { SessionRepository } from './services/session-repository.js';
 import type { QuotaPolicy } from './services/quota-service.js';
 import { InMemoryInstallationRepository } from './storage/in-memory-installation-repository.js';
+import { InMemorySessionRepository } from './storage/in-memory-session-repository.js';
 
 interface RegisterInstallationHeaders {
   'x-app-attestation'?: string;
@@ -140,11 +148,10 @@ export function buildApp(options: BuildAppOptions = {}) {
       now
     );
   const configService = new ConfigService(options.appConfig ?? defaultAppConfig);
+  const sessionRepository = options.sessionRepository ?? new InMemorySessionRepository();
   const sessionService = new SessionService({
     broker: options.secretBroker ?? new UnavailableSecretBroker(),
-    ...(options.sessionRepository === undefined
-      ? {}
-      : { repository: options.sessionRepository }),
+    repository: sessionRepository,
     ...(options.translationCallsUrl === undefined
       ? {}
       : { callsUrl: options.translationCallsUrl }),
@@ -152,9 +159,15 @@ export function buildApp(options: BuildAppOptions = {}) {
     ...(options.quotaPolicy === undefined ? {} : { quotaPolicy: options.quotaPolicy }),
     now
   });
+  const feedbackService = new FeedbackService(sessionRepository, now);
 
   const app = Fastify({
     logger: options.logger ?? false,
+    ajv: {
+      customOptions: {
+        removeAdditional: false
+      }
+    },
     genReqId: () => `tr_${randomUUID().replaceAll('-', '')}`
   });
 
@@ -490,6 +503,53 @@ export function buildApp(options: BuildAppOptions = {}) {
             error.message,
             error.retryable,
             error.retryAfterMs
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  app.post<{
+    Params: RecreateTranslationLegParams;
+    Headers: AuthorizationHeaders;
+    Body: FeedbackRequest;
+  }>(
+    '/v1/translation-sessions/:sessionId/feedback',
+    {
+      schema: {
+        params: recreateTranslationLegParamsSchema,
+        body: feedbackRequestSchema,
+        response: {
+          200: feedbackResponseSchema,
+          400: errorEnvelopeSchema,
+          401: errorEnvelopeSchema,
+          404: errorEnvelopeSchema
+        }
+      }
+    },
+    async (request, reply) => {
+      const identity = await tokenVerifier.authenticateAuthorizationHeader(
+        request.headers.authorization
+      );
+      if (identity === null) {
+        return sendError(request, reply, 401, 'INVALID_APP_TOKEN', 'App token is invalid');
+      }
+
+      try {
+        const feedback = await feedbackService.upsert(request.body, {
+          sessionId: request.params.sessionId,
+          safetyIdentifier: identity.safetyIdentifier
+        });
+        return reply.code(200).send(feedback);
+      } catch (error) {
+        if (error instanceof FeedbackServiceError) {
+          return sendError(
+            request,
+            reply,
+            error.httpStatus,
+            error.code,
+            error.message
           );
         }
         throw error;

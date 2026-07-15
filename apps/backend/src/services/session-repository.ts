@@ -6,6 +6,7 @@ import type {
   TranslationSession
 } from './session-service.js';
 import type { QuotaReservation } from './quota-service.js';
+import type { FeedbackCategory, FeedbackResponse } from './feedback-service.js';
 
 export interface StoredSessionLeg {
   clientLegId: string;
@@ -45,6 +46,16 @@ export interface CompleteSessionPersistenceInput {
   completion: CompleteTranslationSessionRequest;
 }
 
+export interface UpsertFeedbackPersistenceInput {
+  safetyIdentifier: string;
+  sessionId: string;
+  rating: number;
+  categories: FeedbackCategory[];
+  storeComment: boolean;
+  comment: string | null;
+  now: Date;
+}
+
 export class SessionRepositoryError extends Error {
   constructor(
     readonly code: 'IDEMPOTENCY_CONFLICT' | 'RESOURCE_NOT_FOUND' | 'RATE_LIMITED',
@@ -69,4 +80,6 @@ export interface SessionRepository {
   completeSession(
     input: CompleteSessionPersistenceInput
   ): Promise<CompleteTranslationSessionResponse>;
+
+  upsertFeedback(input: UpsertFeedbackPersistenceInput): Promise<FeedbackResponse>;
 }

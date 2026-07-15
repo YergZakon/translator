@@ -290,3 +290,41 @@ export const completeTranslationSessionResponseSchema = Type.Object(
   },
   { additionalProperties: false }
 );
+
+const feedbackCategorySchema = Type.Union([
+  Type.Literal('wrong_meaning'),
+  Type.Literal('missing_content'),
+  Type.Literal('critical_entity'),
+  Type.Literal('latency'),
+  Type.Literal('audio_quality'),
+  Type.Literal('echo_loop'),
+  Type.Literal('connection'),
+  Type.Literal('ui'),
+  Type.Literal('other')
+]);
+
+export const feedbackRequestSchema = Type.Object(
+  {
+    rating: Type.Integer({ minimum: 1, maximum: 5 }),
+    categories: Type.Array(feedbackCategorySchema, {
+      maxItems: 8,
+      uniqueItems: true
+    }),
+    comment: Type.Optional(Type.Union([Type.String({ maxLength: 500 }), Type.Null()])),
+    consentFlags: Type.Object(
+      {
+        storeComment: Type.Boolean()
+      },
+      { additionalProperties: false }
+    )
+  },
+  { additionalProperties: false }
+);
+
+export const feedbackResponseSchema = Type.Object(
+  {
+    sessionId: Type.String({ pattern: '^ts_[A-Za-z0-9]{20,40}$' }),
+    updatedAt: Type.String({ format: 'date-time' })
+  },
+  { additionalProperties: false }
+);
