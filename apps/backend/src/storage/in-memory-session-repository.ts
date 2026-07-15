@@ -3,6 +3,7 @@ import type {
   TranslationLegCredentials,
   TranslationSession
 } from '../services/session-service.js';
+import type { FeedbackResponse } from '../services/feedback-service.js';
 import {
   type CompleteSessionPersistenceInput,
   type CreateSessionPersistenceInput,
@@ -11,7 +12,8 @@ import {
   type SessionRepository,
   SessionRepositoryError,
   type StoredSession,
-  type StoredSessionLeg
+  type StoredSessionLeg,
+  type UpsertFeedbackPersistenceInput
 } from '../services/session-repository.js';
 
 interface IdempotencyEntry<T> {
@@ -26,6 +28,13 @@ interface SessionRecord {
   model: string;
   legs: Map<string, StoredSessionLeg>;
   completion?: CompleteTranslationSessionResponse;
+  feedback?: {
+    rating: number;
+    categories: string[];
+    storeComment: boolean;
+    comment: string | null;
+    response: FeedbackResponse;
+  };
 }
 
 interface MintEvent {
@@ -183,6 +192,25 @@ export class InMemorySessionRepository implements SessionRepository {
     return Promise.resolve(completion);
   }
 
+  upsertFeedback(input: UpsertFeedbackPersistenceInput): Promise<FeedbackResponse> {
+    const session = this.#sessions.get(input.sessionId);
+    if (session === undefined || session.safetyIdentifier !== input.safetyIdentifier) {
+      throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
+    }
+    const response: FeedbackResponse = {
+      sessionId: input.sessionId,
+      updatedAt: input.now.toISOString()
+    };
+    session.feedback = {
+      rating: input.rating,
+      categories: [...input.categories],
+      storeComment: input.storeComment,
+      comment: input.comment,
+      response
+    };
+    return Promise.resolve(response);
+  }
+
   #reserveQuota(input: CreateSessionPersistenceInput): QuotaRollback {
     this.#pruneExpiredSessions(input.now);
     const owner = input.safetyIdentifier;
@@ -281,7 +309,13 @@ export class InMemorySessionRepository implements SessionRepository {
 
   #pruneExpiredSessions(now: Date): void {
     for (const [sessionId, session] of this.#sessions) {
-      if (session.activeUntil.getTime() <= now.getTime()) this.#sessions.delete(sessionId);
+      if (
+        session.activeUntil.getTime() <= now.getTime() &&
+        session.completion === undefined &&
+        session.feedback === undefined
+      ) {
+        this.#sessions.delete(sessionId);
+      }
     }
   }
 

@@ -53,7 +53,7 @@ test(
     try {
       await runMigrations(pool);
       await pool.query(
-        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
+        'TRUNCATE TABLE translation_session_feedback, translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
       );
 
       const broker = new RecordingBroker();
@@ -197,7 +197,7 @@ test(
     try {
       await runMigrations(pool);
       await pool.query(
-        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
+        'TRUNCATE TABLE translation_session_feedback, translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
       );
 
       let sequence = 0;
@@ -364,7 +364,7 @@ test(
     try {
       await runMigrations(pool);
       await pool.query(
-        'TRUNCATE TABLE translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
+        'TRUNCATE TABLE translation_session_feedback, translation_quota_mint_events, translation_quota_daily_usage, translation_session_idempotency, translation_session_legs, translation_sessions RESTART IDENTITY'
       );
 
       const broker = new RecordingBroker();

@@ -13,6 +13,7 @@ import type {
   TranslationSession
 } from '../services/session-service.js';
 import type { QuotaReservation } from '../services/quota-service.js';
+import type { FeedbackResponse } from '../services/feedback-service.js';
 import {
   type CompleteSessionPersistenceInput,
   type CreateSessionPersistenceInput,
@@ -20,7 +21,8 @@ import {
   type RecreateLegPersistenceInput,
   type SessionRepository,
   SessionRepositoryError,
-  type StoredSession
+  type StoredSession,
+  type UpsertFeedbackPersistenceInput
 } from '../services/session-repository.js';
 
 type Operation = 'create_session' | 'recreate_leg';
@@ -313,6 +315,49 @@ export class PostgresSessionRepository implements SessionRepository {
     }
   }
 
+  async upsertFeedback(input: UpsertFeedbackPersistenceInput): Promise<FeedbackResponse> {
+    const result = await this.#pool.query<{ updated_at: Date }>(
+      `
+        INSERT INTO translation_session_feedback (
+          session_id,
+          rating,
+          categories,
+          store_comment,
+          comment_redacted,
+          created_at,
+          updated_at
+        )
+        SELECT session_id, $3, $4, $5, $6, $7, $7
+        FROM translation_sessions
+        WHERE session_id = $1 AND owner_safety_identifier = $2
+        ON CONFLICT (session_id) DO UPDATE
+        SET rating = EXCLUDED.rating,
+            categories = EXCLUDED.categories,
+            store_comment = EXCLUDED.store_comment,
+            comment_redacted = EXCLUDED.comment_redacted,
+            updated_at = EXCLUDED.updated_at
+        RETURNING updated_at
+      `,
+      [
+        input.sessionId,
+        input.safetyIdentifier,
+        input.rating,
+        input.categories,
+        input.storeComment,
+        input.comment,
+        input.now
+      ]
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new SessionRepositoryError('RESOURCE_NOT_FOUND');
+    }
+    return {
+      sessionId: input.sessionId,
+      updatedAt: row.updated_at.toISOString()
+    };
+  }
+
   async #lockOperation(
     client: PoolClient,
     operation: Operation,
@@ -484,6 +529,12 @@ export class PostgresSessionRepository implements SessionRepository {
       `
         DELETE FROM translation_sessions
         WHERE active_until <= $1
+          AND completed_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM translation_session_feedback AS feedback
+            WHERE feedback.session_id = translation_sessions.session_id
+          )
       `,
       [now]
     );
