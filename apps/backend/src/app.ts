@@ -40,6 +40,7 @@ import {
   SessionService,
   SessionServiceError
 } from './services/session-service.js';
+import type { SessionRepository } from './services/session-repository.js';
 import { InMemoryInstallationRepository } from './storage/in-memory-installation-repository.js';
 
 interface RegisterInstallationHeaders {
@@ -79,6 +80,7 @@ export interface BuildAppOptions {
   appTokenFactory?: () => string;
   appConfig?: AppConfig;
   secretBroker?: SecretBroker;
+  sessionRepository?: SessionRepository;
   translationCallsUrl?: string;
   sessionIdFactory?: (prefix: 'ts' | 'leg') => string;
   logger?: FastifyServerOptions['logger'];
@@ -131,6 +133,9 @@ export function buildApp(options: BuildAppOptions = {}) {
   const configService = new ConfigService(options.appConfig ?? defaultAppConfig);
   const sessionService = new SessionService({
     broker: options.secretBroker ?? new UnavailableSecretBroker(),
+    ...(options.sessionRepository === undefined
+      ? {}
+      : { repository: options.sessionRepository }),
     ...(options.translationCallsUrl === undefined
       ? {}
       : { callsUrl: options.translationCallsUrl }),

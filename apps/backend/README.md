@@ -22,7 +22,7 @@ The service applies versioned PostgreSQL migrations under an advisory lock befor
 
 `POST /v1/translation-sessions` validates the accepted OpenAPI request, enforces kill-switch and idempotency rules, and mints one or two short-lived translation secrets through OpenAI. The standard API key stays server-side. Provider error bodies, Authorization headers, client secrets, SDP, audio, and transcripts are not logged.
 
-The current session idempotency store is process-local and evicts responses when their provider credentials expire. Persistent cross-restart session idempotency remains a separate task; installation auth is PostgreSQL-backed.
+Translation-session ownership, current leg metadata, and create/recreate idempotency results are PostgreSQL-backed. Transactional locks coalesce the same idempotency key across processes, so a retry after restart or on another instance receives the committed result without minting another secret. Responses containing short-lived client credentials are stored only as AES-256-GCM ciphertext using a domain-separated key derived from `SAFETY_IDENTIFIER_SECRET`; expired session/idempotency rows are pruned opportunistically. Rotate that server secret only after previously encrypted replay windows have expired.
 
 ## Checks
 
